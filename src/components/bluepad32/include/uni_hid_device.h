@@ -30,8 +30,13 @@
 #include "controller/uni_controller.h"
 #include "controller/uni_controller_type.h"
 #include "parser/uni_hid_parser.h"
+#include "parser/uni_hid_parser_rumble.h"
 #include "uni_circular_buffer.h"
 #include "uni_error.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define HID_MAX_NAME_LEN 240              ///< Max HID device name length.
 #define HID_MAX_DESCRIPTOR_LEN 1024       ///< Max HID descriptor length (Triton Report Map is large).
@@ -110,15 +115,20 @@ struct uni_hid_device_s {
     uni_sdp_query_type_t sdp_query_type;
 
     // Channels
-    uint16_t hids_cid;  ///< BLE only: HID service channel ID.
-
-    // TODO: Create a union of gamepad/mouse/keyboard structs
-    // At the moment "mouse" reuses gamepad struct, but it is a hack.
+    uint16_t hids_cid;                            ///< BLE only: HID service channel ID.
     uni_controller_type_t controller_type;        ///< type of controller. E.g: DualShock4, Switch, etc.
     uni_controller_subtype_t controller_subtype;  ///< sub-type of controller attached, used for Wii mostly
     uni_controller_t controller;                  ///< Controller data (gamepad, mouse, etc.)
 
     uni_report_parser_t report_parser;  ///< Function used to parse the HID reports.
+    /**
+     * @brief Shared rumble timer and state machine.
+     *
+     * Stored directly on `uni_hid_device_t` (outside `parser_data[]`) so that parser
+     * `setup()` functions calling `memset(ins, 0, sizeof(*ins))` on `parser_data`
+     * cannot zero active BTstack intrusive timer nodes.
+     */
+    uni_rumble_t rumble;
 
     uint32_t misc_button_wait_release;  ///< Buttons that need to be released before triggering the action again.
     uint32_t misc_button_wait_delay;    ///< Buttons that need to wait for a delay before triggering the action again.
@@ -133,18 +143,6 @@ struct uni_hid_device_s {
      */
     uni_circular_buffer_t outgoing_buffer;
 
-    /**
-     * @brief Bytes reserved to controller's parser instances.
-     * E.g.: The Wii driver uses it for the state machine.
-     */
-    uint8_t parser_data[HID_DEVICE_MAX_PARSER_DATA];
-
-    /**
-     * @brief Bytes reserved to different platforms.
-     * E.g.: C64 or Airlift might use it to store different values.
-     */
-    uint8_t platform_data[HID_DEVICE_MAX_PLATFORM_DATA];
-
     uni_bt_conn_t conn;  ///< Bluetooth connection info.
 
     /**
@@ -158,6 +156,24 @@ struct uni_hid_device_s {
      * For example, DualShock4 has the "mouse" as a child.
      */
     struct uni_hid_device_s* child;
+
+    /**
+     * @brief Scratch buffer reserved for per-controller parser state machines
+     * (e.g., Wii, Switch, Switch 2 BLE `sw2_instance_t`, or Steam Triton
+     * `steam_triton_instance_t`).
+     *
+     * Explicitly aligned to an 8-byte boundary so parser instance structs that
+     * embed 64-bit pointers or BTstack linked-list nodes (`btstack_timer_source_t`,
+     * `gatt_client_notification_t`) can safely alias `&d->parser_data[0]` without
+     * triggering misaligned pointer UndefinedBehaviorSanitizer (UBSan) traps.
+     */
+    uint8_t parser_data[HID_DEVICE_MAX_PARSER_DATA] __attribute__((aligned(8)));
+
+    /**
+     * @brief Scratch buffer reserved for platform-specific per-device state
+     * (e.g., C64 or custom platform drivers), 8-byte aligned for safe struct aliasing.
+     */
+    uint8_t platform_data[HID_DEVICE_MAX_PLATFORM_DATA] __attribute__((aligned(8)));
 };
 typedef struct uni_hid_device_s uni_hid_device_t;
 
@@ -508,5 +524,9 @@ bool uni_hid_device_is_keyboard(const uni_hid_device_t* d);
  * @return true if it is a virtual device, false otherwise.
  */
 bool uni_hid_device_is_virtual_device(const uni_hid_device_t* d);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif  // UNI_HID_DEVICE_H

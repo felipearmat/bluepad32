@@ -1,4 +1,4 @@
-# Bluepad32 for Pico W and Pico 2 W using Pico SDK
+# Bluepad32 for Pico W and Pico 2 W with Pico SDK
 
 ## Supported boards
 
@@ -12,69 +12,91 @@
 
 ## Installation
 
-### 1. Download Pico SDK
+### 1. Install the Pico SDK
 
-You need to install Pico SDK. The instructions are different for Linux/macOS and Windows.
+Install the Pico SDK for your operating system:
 
-=== "Pico SDK for Linux / macOS"
+=== "macOS"
 
-Recommended: Use Pico SDK v2.1.1 or newer.
+    Use Pico SDK v2.3.0 or newer.
 
-    Clone Pico SDK from Github: <https://github.com/raspberrypi/pico-sdk>
+    Clone the Pico SDK from GitHub (<https://github.com/raspberrypi/pico-sdk>):
 
     ```sh
-    # Optionally create a destination folder
+    # Create a destination directory
     mkdir ~/pico && cd ~/pico
 
-    # Clone it from Github
+    # Clone the Pico SDK repository
     git clone https://github.com/raspberrypi/pico-sdk.git --branch master
     cd pico-sdk
     git submodule update --init
     ```
 
-    And set `PICO_SDK_PATH` to the correct path:
+    Set `PICO_SDK_PATH` to the Pico SDK directory:
 
-    ```
-    # set PICO_SDK_PATH to the correct path
+    ```sh
+    # Set PICO_SDK_PATH to the correct path
     export PICO_SDK_PATH=$HOME/pico/pico-sdk/
     ```
 
-=== "Pico SDK for Windows"
+=== "Linux"
 
-    Follow these instructions
+    Use Pico SDK v2.3.0 or newer.
+
+    Clone the Pico SDK from GitHub (<https://github.com/raspberrypi/pico-sdk>):
+
+    ```sh
+    # Create a destination directory
+    mkdir ~/pico && cd ~/pico
+
+    # Clone the Pico SDK repository
+    git clone https://github.com/raspberrypi/pico-sdk.git --branch master
+    cd pico-sdk
+    git submodule update --init
+    ```
+
+    Set `PICO_SDK_PATH` to the Pico SDK directory:
+
+    ```sh
+    # Set PICO_SDK_PATH to the correct path
+    export PICO_SDK_PATH=$HOME/pico/pico-sdk/
+    ```
+
+=== "Windows"
+
+    Follow the official Windows installer instructions:
 
     * <https://www.raspberrypi.com/news/raspberry-pi-pico-windows-installer/>
 
-### 2. Clone Bluepad32 GitHub repo
+### 2. Clone the Bluepad32 repository
 
-   ```sh
-   git clone --recursive https://github.com/ricardoquesada/bluepad32.git
-   ```
+```sh
+git clone --recursive https://github.com/ricardoquesada/bluepad32.git
+```
 
-### 3. Patch BTstack
+### 3. Apply the BTstack patches
 
-   ```sh
-   cd ${BLUEPAD32_SRC}/external/btstack
-   git apply ../patches/*.patch
-   ```
+```sh
+cd ${BLUEPAD32_SRC}/external/btstack
+git apply ../patches/*.patch
+```
 
-### 4. Modify example
+### 4. Customize the example
 
-Go to example folder:
+Open the Pico W example directory:
 
-   ```sh
-   # ${BLUEPAD32} represents the folder where Bluepad32 Github repo was cloned
-   cd ${BLUEPAD32}/examples/pico_w
-   ```
+```sh
+# ${BLUEPAD32} is the path to your cloned Bluepad32 repository
+cd ${BLUEPAD32}/examples/pico_w
+```
 
-Customize `src/my_platform.c` file to your needs:
+Edit `src/my_platform.c` to match your application requirements:
 
 - [my_platform.c](https://github.com/ricardoquesada/bluepad32/blob/main/examples/pico_w/src/my_platform.c)
 
+### 5. Build the firmware
 
-### 5. Build it
-
-Build the `.uf2` file by doing:
+Run these commands to build the `.uf2` firmware file:
 
 ```sh
 mkdir build
@@ -83,10 +105,10 @@ cmake ..
 make -j
 ```
 
-### 6. Flash it
+### 6. Flash the firmware
 
-Copy `build/bluepad32_picow_example_app.uf2` to Pico W.
+Copy `build/bluepad32_picow_example_app.uf2` to your Pico W or Pico 2 W.
 
-Use this guide if you are not sure how to do it:
+For flashing instructions, see:
 
-* <https://projects.raspberrypi.org/en/projects/get-started-pico-w/>
+- <https://projects.raspberrypi.org/en/projects/get-started-pico-w/>

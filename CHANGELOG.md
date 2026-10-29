@@ -1,26 +1,196 @@
 # Changelog
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [4.2.1] - 2025-??-??
-## Changed
-- Pico W: Recommends Pico SDK 2.1.1 or newer which fixed nasty bug triggered by Bluepad32. See:
-  [Pico SDK #2157][picosdk#2157] and [Pico SDK #2165][picosdk#2165]
-- BTstack: Updated to 1.7.0 tag (latest master branch)
-  - Updated build system to support new BTstack integration
+## [5.0.0-beta1] - 2026-??-??
 
-## Fixed
-- Pico W: Able to store string properties, meaning that allowlist works as expected [Github Issue #160][github_issue_160]
-- uni_hid_device: Fix possible overflow when parsing HID descriptor.
+### Changed
+
+- Parser / Device Dump: Replaced `uni_report_parser_t::device_dump`
+  (`report_device_dump_t`) with a caller-buffered `device_extra_info`
+  (`report_device_extra_info_fn_t`) callback across all HID parsers, added
+  SInput extra info dump support, and displayed live hardware/firmware extra
+  info in the `examples/posix_imgui` Info tab.
+
+## [5.0.0-beta0] - 2026-10-05
+
+### New
+
+- ESP32: Added support for ESP32-C5 and newer ESP32 chips via
+  `CONFIG_SOC_BT_CLASSIC_SUPPORTED` and `CONFIG_SOC_BLE_SUPPORTED` capability
+  macros.
+- ESP32 Console: Added support for `USB_SERIAL_JTAG` as a primary console for
+  the REPL in addition to `UART`. Fixes [Github Issue #209][github_issue_209]
+  ([PR #210][github_pr_210], [PR #211][github_pr_211]).
+- ESP-IDF: Added support for ESP-IDF v5.5 and v6.1.
+- Pico W: Added support for Pico SDK 2.3.
+- DualShock 3: Added 3-axis accelerometer and gyroscope support.
+- Switch: Added support for Nintendo Switch Online NES Controllers (Left `0x09`
+  and Right `0x0a`) ([PR #206][github_pr_206]).
+- BLE: Allow HID devices that do not expose the Device Information Service
+  (DIS, `0x180A`) to connect via `UNI_HID_DEVICE_ALLOW_NO_DIS`
+  ([PR #199][github_pr_199]).
+- Examples: Added `examples/posix_imgui`, a desktop controller tester built
+  with Dear ImGuifeaturing button/axess, rumble testing, gyroscope/accelerometer,
+  and LED/lightbar controls.
+- Posix Example: Added `--ble` / `-b 0|1` command-line option to enable or
+  disable BLE connections at startup.
+- Tests & CI: Added host CTest unit test suite (`tests/`) with AddressSanitizer
+  and UndefinedBehaviorSanitizer (`ASan`/`UBSan`) covering `uni_hid_device`,
+  `uni_hid_parser`, BTstack packet handlers, SDP, BLE advertisements, rumble
+  timers, TLV properties, and Wii Balance Board, plus GitHub Actions CI and
+  upstream SDK canary workflows.
+- SInput protocol: Add support https://docs.handheldlegend.com/s/sinput
+
+### Changed
+
+- IMU Telemetry: Standardized `uni_gamepad_t::accel[3]` and
+  `uni_gamepad_t::gyro[3]` across all 6 IMU-capable parsers (DualShock 3,
+  DualShock 4, DualSense, Switch, Wii, PS Move) to `float` in physical SI units
+  (`m/s^2` for accelerometer and `rad/s` for gyroscope) using a canonical
+  right-handed Y-up coordinate frame (`+X` right/pitch, `+Y` up/yaw, `+Z`
+  back/roll).
+- BTstack: Updated to v1.8.2+ (`master` branch)
+- BLE: Disabled LE Secure Connections by default to improve compatibility with
+  BLE controllers that fail key exchange.
+- ESP-IDF: Dropped support for ESP-IDF v4.4 and removed legacy `cmd_nvs_4.4`
+  and `cmd_system_4.4` console components.
+- Platforms: Removed `NINA` (Arduino NINA-FW), `AirLift` (Adafruit AirLift /
+  CircuitPython), and `MightyMiggy` platforms, along with their firmware
+  targets, documentation, and `uni_gpio` analog stubs.
+- ESP32:
+  - Only the active ESP32 platform (`CONFIG_BLUEPAD32_PLATFORM_*`) is compiled
+    in `CMakeLists.txt`.
+  - Migrated `uni_mouse_quadrature` hardware timers to `gptimer`
+    (`esp_driver_gptimer`).
+  - Increased default main task stack size
+    (`CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192`) for ESP-IDF v5.3+ / v5.5+. Fixes
+    [Github Issue #143][github_issue_143].
+  - Updated `cmd_system` component to the latest ESP-IDF version.
+- Pico W: Recommends Pico SDK 2.3 or newer which fixed a nasty bug triggered
+  by Bluepad32. See: [Pico SDK #2157][picosdk#2157] and
+  [Pico SDK #2165][picosdk#2165].
+- Properties: Unified `uni_property_pico.c` and `uni_property_posix.c` into a
+  shared BTstack TLV backend (`arch/uni_property_btstack_tlv.c`) with support
+  for `UNI_PROPERTY_TYPE_STRING` and `UNI_PROPERTY_TYPE_FLOAT`.
+- Rumble: Consolidated delayed-start and duration timers across all 8
+  rumble-capable parsers (DS3, DS4, DualSense, PS Move, Switch, Wii, Xbox One,
+  Stadia) into a shared `uni_hid_parser_rumble` subsystem with deterministic
+  timer teardown on disconnect.
+- Core: Standardized device index types to `int32_t`, updated
+  `UNI_PLATFORM_STRUCT_VERSION`, and replaced `switch(controller_type)` with
+  table-driven parser lookup.
+- Circular Buffer: Refactored `uni_circular_buffer` into a variable-length
+  byte-stream ring buffer (`UNI_CIRCULAR_BUFFER_SIZE = 4096`) to prevent
+  dropping small packet bursts (such as Nintendo Switch rumble reports).
+  Removed `UNI_CIRCULAR_BUFFER_DATA_SIZE` and `uni_circular_buffer_data_t`, and
+  changed `uni_circular_buffer_get()` from `void** data` to caller-provided
+  `void* data`.
+- Documentation: Expanded `docs/architecture.md`, `uni_hid_device.h` API docs,
+  `docs/supported_mice.md` ([PR #179][github_pr_179]), and the Arduino and Raw
+  programmer's guides.
+
+### Fixed
+
+- BTstack v1.8.2+: Restored BR/EDR SSP auto-accept
+  (`gap_ssp_set_auto_accept(true)`) and 7-byte minimum encryption key size
+  (`gap_set_required_encryption_key_size(7)`) so SSP "Just Works" controllers
+  (such as DualSense and Switch Pro Controller) do not fail authentication with
+  `ERROR_CODE_PIN_OR_KEY_MISSING`.
+- DualSense:
+  - Fixed `uni_hid_parser_ds5_set_player_leds()` to decode the 4-bit
+    `uni_gamepad_seat_t` bitmask (`0x00..0x0f`) into Sony's symmetric 5-LED
+    player patterns instead of indexing by `value % 5`.
+  - Fixed unsigned underflow in adaptive trigger helpers when strength or
+    amplitude is `0`.
+- Steam Controller:
+  - Moved parser state from global variables to a per-device instance struct.
+    Fixes [Github Issue #181][github_issue_181].
+  - Resolved GATT connection handle properly during BLE service and
+    characteristic discovery so BLE Steam Controller connects and initializes
+    reliably.
+  - Fixed `stick_x` byte offset (`report[20..21]` instead of `report[19..20]`)
+    and signed `int16_t` negation overflow.
+- Switch: Guarded `parse_imu()` and `mult_frac()` against division-by-zero when
+  IMU calibration divisors are zero, and validated minimum input report
+  lengths.
+- Switch: Rumble strength follows the requested magnitude. The magnitude was
+  encoded as a frequency with a fixed amplitude, so any rumble felt about the
+  same. Both actuators now get the same data, as SDL sends it: the weak
+  magnitude sets the high-band amplitude and the strong one the low-band
+  amplitude, at a fixed ~150 Hz, so a single Joy-Con rumbles for either one.
+- Switch: Fixed Joy-Con rumble. Setup now enables vibration (subcommand
+  `0x48`); Joy-Cons ignore rumble until it is enabled.
+- Switch: Added `uni_hid_parser_switch_request_sleep()`, which asks the pad to
+  disconnect and go to sleep (subcommand `0x06`), like the console does when it
+  turns controllers off.
+- Wii Balance Board: Fixed swapped default move/fire threshold constants
+  (`move=1500`, `fire=5000`), guarded calibration interpolation against
+  zero/inverted dividers, and decoupled Balance Board from ESP-IDF console
+  headers.
+- Pico W:
+  - Able to store string properties, meaning that allowlist works as expected.
+    Fixes [Github Issue #160][github_issue_160] ([PR #161][github_pr_161]).
+  - Dynamically query `btstack_tlv_get_instance()` on property access to
+    prevent early-boot NULL dereference before `HCI_STATE_WORKING`.
+  - Fixed possible compile issue when using Pico SDK 1.5.1.
+- Posix Example: Fixed uninitialized `tlv_context` pointer passed to BTstack
+  TLV link-key and LE device DB setup.
+- ESP32 Example: Fixed build issue in `cmd_system` ([PR #165][github_pr_165]).
+- Bluetooth & Core:
+  - Fixed `uni_bt_set_gap_security_level()` and
+    `uni_bt_get_gap_security_level()` to read/write `val.u8` instead of
+    `val.u32`, and ordered pointer-sized `str` first in `uni_property_value_t`
+    for 64-bit zero-initialization.
+  - Prevented `update_allowlist_from_property()` from overwriting stored
+    TLV/NVS allowlist entries on startup, and improved string safety with
+    `snprintf`.
+  - Hardened SDP query abort lifecycle (`uni_bt_sdp_query_abort()`), BLE
+    advertisement bounds parsing, and BLE DIS PnP ID ATT status checks.
+  - Hardened `uni_circular_buffer` bounds and `uni_hid_device` virtual child
+    and timer teardown lifecycle, and removed unintended
+    `uni_property_dump_all()` call when pressing the misc button.
+- HID Parsers:
+  - Fixed possible buffer overflow when setting HID descriptor in
+    `uni_hid_device`.
+  - Guarded against division-by-zero when logical axis/pedal range is `<= 0`
+    and normalized signed pedal logical ranges (`min < 0`) to `0..1020`.
+  - Validated input/feature report buffer lengths across DS4, DualSense, Atari,
+    and Keyboard (`parse_jx_05`) parsers.
+  - Hardened BLE state machine to prevent permanent scanning stalls on
+    connection or HIDS GATT failures.
+  - Added strict OOB bounds checking to SDP query parsing.
+  - Switch parser: added calibration bounds checks and division-by-zero
+    prevention.
+  - Wii parser: added short report length bounds checking and fixed classic
+    controller right-stick decoding.
+  - Unijoysticle: added bounds checks on C64 pot modes, guarded autofire against
+    division-by-zero, and improved quadrature mouse scale checks.
+- Testing: Hardened CTest framework (`test_check.h`) to evaluate asserts
+  properly in Release builds (`-DNDEBUG`), fixed TLV concurrent testing issues,
+  and added regressions for out-of-bounds guards.
 
 [picosdk#2157]: https://github.com/raspberrypi/pico-sdk/pull/2157
 [picosdk#2165]: https://github.com/raspberrypi/pico-sdk/pull/2165
+[github_issue_143]: https://github.com/ricardoquesada/bluepad32/pull/143
 [github_issue_160]: https://github.com/ricardoquesada/bluepad32/issues/160
+[github_pr_161]: https://github.com/ricardoquesada/bluepad32/pull/161
+[github_pr_165]: https://github.com/ricardoquesada/bluepad32/pull/165
+[github_pr_179]: https://github.com/ricardoquesada/bluepad32/pull/179
+[github_issue_181]: https://github.com/ricardoquesada/bluepad32/issues/181
+[github_pr_199]: https://github.com/ricardoquesada/bluepad32/pull/199
+[github_pr_206]: https://github.com/ricardoquesada/bluepad32/pull/206
+[github_issue_209]: https://github.com/ricardoquesada/bluepad32/issues/209
+[github_pr_210]: https://github.com/ricardoquesada/bluepad32/pull/210
+[github_pr_211]: https://github.com/ricardoquesada/bluepad32/pull/211
 
 ## [4.2.0] - 2025-01-03
+
 ### New
+
 - ESP32: ESP32-C6 and ESP32-H2 supported.
   - They depend on BTstack 1.6.2 (pre-bundled with Bluepad32 v4.2.0)
 - Pico W: Pico 2 W supported.
@@ -34,6 +204,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Allows user to change the Wii report type
 
 ## Changed
+
 - BTstack: Using v1.6.2
   - v1.6.1 is still supported by Bluepad32.
   - BTstack v1.6.2 changed some API used by Bluepad32. Bluepad32 adapts the API-calls at compile-time.
@@ -57,6 +228,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - You might need to uninstall PlatformIO first. E.g: `rm -rf ~/.platformio`
 
 ## Fixed
+
 - Switch driver:
   - Increased timeout
   - Fixed pro joystick calibration
@@ -82,7 +254,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [pico_w_btstack_config_h]: https://github.com/ricardoquesada/bluepad32/blob/main/examples/pico_w/src/btstack_config.h
 
 ## [4.1.0] - 2024-06-03
+
 ### New
+
 - Platform: new callback: `on_device_discovered(bdaddr, name, cod, rssi)`
   - Platforms can override this function to determine whether Bluepad32 should connect to the discovered device.
 - BLE: Populates RSSI field.
@@ -91,18 +265,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [github_issue_104]: https://github.com/ricardoquesada/bluepad32/issues/104
 
 ### Changed
+
 - BTstack: Updated to v1.6.1
 
 ### Fixed
+
 - Service: Returns correct error code when writing values.
 - Doc: Improved documentation.
 
 ## [4.0.4] - 2024-04-20
+
 ### New
+
 - Wii: `uni_hid_parser_wii_set_mode(struct uni_hid_device_s* d, wii_mode_t mode)`,
   to change the mode between vertical or horizontal.
 
 ### Changed
+
 - Rumble stops when duration is 0. Before when duration was 0, the rumble command was ignored.
 - Wii + Nunchuk:
   - Nunchuk is reported as the "right" axis using buttons X and Y
@@ -111,6 +290,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Nunchuk + horizontal mode removed (it was broken, and it is not useful)
 
 ### Fixed
+
 - Pico W: Allow multiple BLE connections. Fixes [Github Issue #91][github_issue_91]
 - Nintendo: Accept reports with more data than requested. Fixes [Github Issue #94][github_issue_94]
 
@@ -118,48 +298,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [github_issue_94]: https://github.com/ricardoquesada/bluepad32/issues/94
 
 ## [4.0.3] - 2024-04-09
+
 ### New
+
 - Keyboard: Add method to change LEDs:
   - `uni_hid_parser_keyboard_set_leds(struct uni_hid_device_s* d, uint8_t led_bitmask)`
 
 ### Changed
+
 - Mouse constants: `MOUSE_BUTTON_*` renamed to `UNI_MOUSE_BUTTONS_*`. Avoid conflicts with other libraries, like TinyUSB.
 - Stadia/Xbox: retry rumble switch from 25ms to 50ms. And don't retry on errors other than `ERROR_CODE_COMMAND_DISALLOWED`
 - BTstack: updated to latest `develop` branch. Hash: b74edc46d02bbb5d44d58cfddd05aa74f9735e5e
 
 ### Fixed
+
 - Pico W: Example uses BTstack from Bluepad32 branch. Updated and with custom patches.
 - NINA: Works, there was a regression in v4.0-beta2. Fixes [Github Issue #90][github_issue_90]
 
 [github_issue_90]: https://github.com/ricardoquesada/bluepad32/issues/90
 
 ## [4.0.2] - 2024-04-03
+
 ### Fixed
+
 - Unijoysticle: Fix how to swap ports from gamepad
 - Device: correctly identify mouse/keyboards
 - DualSense: dump info tabbed.
 
 ## [4.0.1] - 2024-04-02
+
 ### New
+
 - [Bluepad32 logo][bluepad32_logo]: Official logo for Bluepad32
 
 [bluepad32_logo]: https://github.com/ricardoquesada/bluepad32/blob/5af12059f4b93ed70c704f8736b7e437269a23ad/docs/images/bluepad32_logo_ok_280.png?raw=true
 
 ### Changed
+
 - `uni_property_dump_all()` deprecates `uni_property_list_all()`
 
 ### Fixed
+
 - Xbox/Stadia: Improvements in rumble. A re-fix of [Github Issue #85][github_issue_85]
 - Console: `getprop <property_name>` works as expected
 - Property: Correctly dump string properties in ESP32
 
 ## [4.0] - 2024-03-24
+
 ### Changed
 
 - Example: Move DualSense trigger adaptive effect from Pico to Posix example.
 - Example: Add Xbox Trigger rumble in Posix example.
 
 ### Fixed
+
 - Xbox: 8BitDo controllers don't rumble forever. Fixes [Github Issue #85][github_issue_85]
 - Xbox: Using internal timer for delayed start, making it easier to cancel previous rumble command.
 - Switch: IMU and Stick calibration work as expected.
@@ -168,9 +360,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [github_issue_85]: https://github.com/ricardoquesada/bluepad32/issues/85
 [github_issue_86]: https://github.com/ricardoquesada/bluepad32/issues/86
 
-
 ## [4.0-rc0] - 2024-03-20
+
 ### New
+
 - New Rumble API: `play_dual_rumble(start_delayed_ms, duration_ms, weak_magnitude, strong_magnitude)`. Fixes [Github Issue #83][github_issue_83]
   - The old `set_rumble(magnitude, duration)` was removed from Bluepad32 "raw"
   - In Arduino API, users can still use the old one, but it is deprecated. A compile-time warning will appear.
@@ -178,6 +371,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - DualSense: Support "vibration2" rumble for DualSense Edge and newer regular DualSense
 
 ### Fixed
+
 - Virtual Device: Don't remove virtual device when Xbox device is connected. Fixes [Github Issue #77][github_issue_77]
 - Xbox: Add rumble support for Xbox Firmware v5.x. Fixes [Github Issue #69][github_issue_69]
 - Stadia: Add rumble support. Fixes [Gitlab Issue #36][gitlab_issue_36]
@@ -190,12 +384,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [gitlab_issue_36]: https://gitlab.com/ricardoquesada/bluepad32/-/issues/36
 
 ## [4.0-beta2] - 2024-03-09
+
 ### New
+
 - BLE Service: Added `uni_bt_enable_service_safe(bool)` API to enable/disable in runtime
 - DualSense: Add support for adaptive trigger
 - Add support for RX-05 TikTok Ring Controller [Github Issue #68][github_issue_68]
 
 ### Changed
+
 - "linux" example renamed to "posix" since it also works on macOS
 - UART: UART console cannot be toggled at runtime. It can only be disabled at compile-time via "menuconfig"
   - Needed to use IDF-IDF v5.2
@@ -206,6 +403,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Calls `btstack_stdio_init()` to have buffered output
 
 ### Fixed
+
 - Pico W/Posix: string properties return default value instead of error.
 - Pico W/Posix: TLV uses its own namespace to prevent clash from user code.
 - Keyboard: 8BitDo Retro Keyboard volume knob works Ok.
@@ -213,20 +411,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [github_issue_65]: https://github.com/ricardoquesada/bluepad32/issues/65#issuecomment-1987046804
 [github_issue_68]: https://github.com/ricardoquesada/bluepad32/issues/68
 
-
 ## [4.0-beta1] - 2024-02-11
+
 ### New
+
 - Pico W: Implement property using BTstack TLV
 - Linux: Implement property using BTstack TLV
 - BLE Service: Add "reset" characteristic
 - Arch: Added `uni_system_reboot()` function
 
 ### Fixed
+
 - Doc: Many fixes to documentation, including adding/changing/removing pages to MKDocs.
 - Misc: Make `const` different variables that needed to be constants.
 
 ## [4.0-beta0] - 2024-02-04
+
 ### New
+
 - Pico W support
   - Support for Raspberry Pi Pico W microcontroller
   - Supports BLE and BR/EDR
@@ -242,10 +444,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [gitlab_issue_26]: https://gitlab.com/ricardoquesada/bluepad32/-/issues/26
 
 ### Changed
+
 - Platform boot logic changed a bit. Rationale: "don't make magic changes".
   - `uni_main()` does not call `btstack_run_loop_execute()` automatically. Must be called by the user
   - `uni_main()` renamed to `uni_init()`.
-    - Rationale:  `uni_init()` just does the initialization. Before `uni_main` was doing init and main loop.
+    - Rationale: `uni_init()` just does the initialization. Before `uni_main` was doing init and main loop.
   - BT scan is OFF by default. Platform must call `uni_bt_enable_new_connections` to enable it.
   - `platform->get_properties()` does nothing. To list/delete Bluetooth keys platform must call them explicitly.
   - Custom platform:
@@ -271,7 +474,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - parser:/ includes all the parser files
   - controller/: controller files
   - Added <uni.h> file, easier for 3rd party user. Just include that file, and
-     don't worry about internal folder re-organization.
+    don't worry about internal folder re-organization.
 - Arduino platform:
   - Removed from "bluepad32" repo. Moved to the [Bluepad32 Arduino template][bluepad32-arduino-template] project.
 - Virtual Device: Disabled by default. To enable it call: `void uni_virtual_device_set_enabled(true);`
@@ -283,6 +486,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [bluepad32-arduino-template]: https://github.com/ricardoquesada/esp-idf-arduino-bluepad32-template
 
 ### Fixed
+
 - Switch: Parse calibration correctly. Does not crash. [Fixes Github Issue #61][github_issue_61]
 - Arduino & NINA: Disconnect gamepad works Ok. Fixes [Github Issue #8][github_arduino_issue_8] and [Github Issue #50][github_issue_50]
 
@@ -291,38 +495,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [github_issue_50]: https://github.com/ricardoquesada/bluepad32/issues/50
 
 ## [3.10.3] - 2023-11-26
+
 ### New
+
 - Atari Wireless Joystick: Add support for it
 
 ### Changed
+
 - Allowlist: rename `uni_bt_allowlist_allow_addr()` to `uni_bt_allowlist_is_allowed_addr()`
 
 ## [3.10.2] - 2023-11-13
+
 ### Changed
+
 - BTstack: Upgraded to latest develop branch as of 2023-11-13
 
 ### Fixed
+
 - Xbox: Axis works Ok (fixed in latest BTstack)
 
 ## [3.10.1] - 2023-11-05
+
 ### New
+
 - Arduino: API to handle keyboard
   - `Controller.isKeyboard()`
   - `Controller.isKeypressed(KeyboardKey)`
   - Sketch.cpp updated with Keyboard, Mouse, Gamepad, BalanceBoard code
 
 ### Changed
+
 - Kconfig: Log Level "choice" and "int" as log level verbosity
   - Easier to handle in code. Doesn't "pollute" the Kconfig options
 
 ### Fixed
+
 - Arduino: Correctly report Keyboard/Mouse types [Github Issue #48][github_issue_48]
 - Keyboard: Typos in Keyboard constants
 
 [github_issue_48]: https://github.com/ricardoquesada/bluepad32/issues/48
 
 ## [3.10.0] - 2023-11-02
+
 ### New
+
 - Keyboard support (BETA, might change in the future):
   - Bluetooth keyboard is supported: Up to 10 keys pressed at the same time + modifiers
   - Unijoysticle:
@@ -331,6 +547,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Press "Tab" to change Modes
 
 ### Changed
+
 - Custom platform:
   - "uni_platform_custom_1" renamed to "my_platform"
   - Removed main/Kconfig. Keeping the configuration simpler.
@@ -340,21 +557,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Sketch shows how to use it
 
 ### Fixed
+
 - Tank Mouse (Bluetooth version) works Ok. Good for Amiga users using Unijoysticle.
 
 ## [v3.9.1] - 2023-10-13
+
 ### New
+
 - "custom platform":
   - It is a new platform useful to start using Bluepad32 withou any dependency like Arduino.
   - Ideal if you are familiar with ESP-IDF and want full control
 
 ### Fixed
+
 - Better DualShock3 support
 - Better DualShock4 support
 - Unijoysticle: Twin Stick mode works with virtual devices
 
 ## [v3.9.0] - 2023-09-16
+
 ### New
+
 - Add touchpad support for DualSense and DualShock4 controllers.
   When one of these devices connect, it creates a mouse virtual device that is controlled
   by the "gamepad" controller. So, two connections will appear.
@@ -373,6 +596,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixes issue: [Gitlab Issue #37][gitlab_issue_37]
 
 ### Changed
+
 - Merge set/get console commands into one, making it a less polluted console.
   If no arguments are passed, it behaves like a getter.
   - `set_autofire_cps` / `get_autofire_cps` -> `autofire_cps`
@@ -392,6 +616,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - The rationale is that these names should be easier to remember.
 
 ### Fixed
+
 - Switch: Fix crash while parsing IMU data ([Bug GH44][github_issue_44])
 - Xbox: Maps R1/R2 to Brake/Gas ([Bug GL34][gitlab_issue_34])
 - Xbox: on FW 5.x, "select" button is mapped ([Bug GHBA07][github_ba_issue_7])
@@ -407,19 +632,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [github_ba_issue_7]: https://github.com/ricardoquesada/bluepad32-arduino/issues/7
 
 ## [v3.8.3] - 2023-08-09
+
 ### Fixed
+
 - Allowlist: Don't show "error" message when there is no error.
 
 ## [v3.8.2] - 2023-08-02
+
 ### Changed
+
 - Unijoysticle: 800XL uses port one as default for joystick and port 2 as default for mouse.
   Each "variant" can easily specify the default ports.
 
 ### Fixed
+
 - Allowlist: Can be called from C++ (Arduino).
 
 ## [v3.8.1] - 2023-07-30
+
 ### New
+
 - Bluetooth Allowlist addresses:
   This feature, when enabled, will allow or decline controller connections based on their address.
   This is useful when using multiple devices running Bluepad32, and you want that certain controller
@@ -432,9 +664,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `allowlist_enable <0 | 1>`: Enable / Disable the allow list feature
 
 ### Changed
+
 - BTstack: Upgraded to 1.5.6.3 (master branch as of July 29)
 
 ### Fix
+
 - Unijoysticle: Misc and back buttons have debouncer per device.
   When multiple controllers are connected, debounce works as expected.
   Before, a `static` variable was used, and was reused by all connected
@@ -442,38 +676,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unijoysticle: Improved debug messages when trying to swap ports.
 
 ## [v3.8.0] - 2023-07-25
+
 ### New
+
 - Unijoysticle: Add support for Unijoysticle 2 800XL board.
   Features:
-   - Mouse: default AtariST.
-   - 2nd and 3rd buttons work. Using [Joy 2B+ protocol][joy2bplus]
-   - Twin Stick
-   - and the rest of the Unijoysticle features.
+  - Mouse: default AtariST.
+  - 2nd and 3rd buttons work. Using [Joy 2B+ protocol][joy2bplus]
+  - Twin Stick
+  - and the rest of the Unijoysticle features.
 
 [joy2bplus]: https://github.com/ascrnet/Joy2Bplus
 
 ### Changed
+
 - Unijoysticle: "Enhanced mode" renamed to "Twin Stick" mode.
   Seems to be the name that has been used for games like Robotron 2084.
 - Unijoysticle: Refactor. Each board has its own file, and its own "class".
   Easier to extend / maintain.
 
 ### Fixed
+
 - Wii + Accel mode: Buttons "A" and "Trigger" act as fire.
   Before "fire" was not mapped, and it was not possible to play games like Lemans.
 - Unijoysticle: Twin Stick works with 2nd buttons
 
 ## [v3.7.3] - 2023-06-17
+
 ### New
+
 - Nintendo Switch: Gyro/Accel is parsed
 - Unijoysticle: Support Nintendo Balance Board.
   Left,Right,Up,Down: just "press" in the right place in the Balance Board.
   Fire: Both Left and Right must be "pressed".
   Threshold (weight) is configurable via the console using:
-    - `set_bb_move_threshold`
-    - `get_bb_move_threshold`
-    - `set_bb_fire_threshold`
-    - `get_bb_fire_threshold`
+  - `set_bb_move_threshold`
+  - `get_bb_move_threshold`
+  - `set_bb_fire_threshold`
+  - `get_bb_fire_threshold`
 - [![Video for reference](https://img.youtube.com/vi/Nj5fZlt_834/0.jpg)](https://www.youtube.com/watch?v=Nj5fZlt_834)
 - Unijoysticle: Possible to swap ports in enhanced mode.
   Either press the gamepad or board "swap" button.
@@ -482,6 +722,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Otherwise, it just shows `mode=enhanced`.
 
 ### Fixed
+
 - Nintendo Switch: reports battery correctly.
 - Nintendo Wii Balance Board: reports battery correctly.
 - 8BitDo Zero 2:
@@ -491,7 +732,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     The rest of modes report the dpad as axis x & y.
 
 ## [v3.7.2] - 2023-05-20
+
 ### New
+
 - Unijoysticle: very experimental paddle support.
   Only for developers. Not ready for public.
 - Arduino: Add "disconnect" API.
@@ -499,14 +742,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   They are in sync now ([Bug GH36][github_issue_36])
 
 ### Changed
+
 - Wii Mote accelerometer exposed to Arduino/Nina/AirLift ([Bug GL28][gitlab_issue_28]).
   Before it was converted inside the Wii parser, preventing platforms to use the accelerometer
   data as they wish.
   Now the accelerometer data is exposed, and platform can do what they pleased.
   Unijoysticle platform parses it a converts it to joystick (previous behavior).
 
-
 ### Fixed
+
 - GameSir T3s gamepad, when in iOS mode works.
   GameSir iOS mode is basically impersonating an Xbox Wireless with FW 4.8.
   Although the recommended for GameSir T3s, is to use it in Switch mode.
@@ -515,7 +759,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [github_issue_36]: https://github.com/ricardoquesada/bluepad32/issues/36
 
 ## [v3.7.1] - 2023-04-30
+
 ### New
+
 - DualSense / DualShock 4: Report Accelerometer and Gyro data
 - Steam Controller: Add support for Steam Controller.
   - Disables "lizard" mode
@@ -523,11 +769,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Gyro/Accel: not supported ATM
 
 ### Fixed
+
 - Xbox Adaptive Controller: Works as expected. Removed "unsupported usage" messages.
 - Arduino / NINA / CircuitPython: Add APIs to read gyro / accel.
 
 ## [v3.7.0] - 2023-04-17
+
 ### New
+
 - Arduino/NINA/AirLift: Added BP32.localBdAddress()([Bug GL5][bluepad32_arduino_issue5]).
   Returns the Local BD Address (AKA Mac Address).
   Updated example that shows how to use it.
@@ -535,10 +784,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [bluepad32_arduino_issue5]: https://gitlab.com/ricardoquesada/bluepad32-arduino/-/issues/5
 
 ### Fixed
+
 - Arduino documentation: How to use Arduino IDE and other minor fixes
 
 ## [v3.7.0-rc.0] - 2023-04-15
+
 ### New
+
 - Support ESP32-S3 / ESP32-C3
   Only BLE gamepads are supported, since BR/EDR is not supported on ESP32-S3 / ESP32-C3.
   Notice that ESP32-S3 has two cores, like ESP32. Bluetooth stack runs on one core,
@@ -548,11 +800,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for advanced application.s
 - Initial Support for Arduino IDE + ESP32.
   See [plat_arduino.md] for details.
-  This means that you can use ESP32 / ESP32-S3 / ESP32-C3 with Bluepad32 from  Arduino IDE.
+  This means that you can use ESP32 / ESP32-S3 / ESP32-C3 with Bluepad32 from Arduino IDE.
 
 [plat_arduino.md]: https://gitlab.com/ricardoquesada/bluepad32/-/blob/main/docs/plat_arduino.md
 
 ### Changed
+
 - `uni_bluetooth_` functions renamed to `uni_bt_`
 - `uni_bluetooth.[ch]` files renamed to `uni_bt.[ch]`
 - `uni_bt_setup_get/set_properties` functions renamed to `uni_bt_get/set_properties`
@@ -562,7 +815,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   To compile Bluepad32 use `idf.py build` instead.
 
 ## [v3.6.2] - 2023-04-02
+
 ### New
+
 - Add support for Sony Motion Controller
 - Unijoysticle: Gamepad button "Start" triggers "gamepad change mode".
   It is useful to switch back and forth from "gamepad" to "mouse" mode without the need
@@ -572,36 +827,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - tools/sixaxixpairer: Supports PS3 Nav controllers
 
 ### Changed
+
 - Arduino: `app_main` is part of Bluepad32
   This makes it easier to port Bluepad32 to Arduino IDE.
   Arduino user: need to update the example code, otherwise two `app_main` functions
   will get compiled and the linker wil complain about it.
 
 ## [v3.6.1] - 2023-03-04
+
 ### New
+
 - C64: Add support for 5button mode, in addition to 3button and rumble.
   - Info about 5 button mode here: https://github.com/crystalct/5plusbuttonsJoystick
 
 ### Changed
+
 - BLE is enabled by default
 - Unijoysticle C64: C64GS buttons work.
   - Supports the official C64GS 2nd button
   - Supports the unofficial 3rd button
 
 ## [v3.6.0] - 2023-02-04
+
 ### New
+
 - Arduino: Added ScrollWheel support in Mouse
 
 ### Changed
+
 - Added option in "menuconfig" to enable Swap Button in Unijoysticle C64/FlashParty Edition
   - Enabled by default. Before the Swap Button was disabled.
 
 ### Fixed
-  - Updated documentation regarding ESP-IDF version
-  - Updated documentation regarding Controllers and BR/EDR and BLE
+
+- Updated documentation regarding ESP-IDF version
+- Updated documentation regarding Controllers and BR/EDR and BLE
 
 ## [v3.6.0-rc1] - 2023-01-29
+
 ### New
+
 - BLE support (experimental). Enable it from "idf.py menuconfig" or
   from console with `set_ble_enabled`. It is disabled by default
   Tested with:
@@ -610,17 +875,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Stadia Controller with BLE Firmware
   - Microsoft BLE mouse
   - Generic BLE mouse
- - Mouse: Add "scroll_wheel" property. Updated when the mouse scroll wheel is moved.
+- Mouse: Add "scroll_wheel" property. Updated when the mouse scroll wheel is moved.
 
 ### Changed
+
 - Refactored a bit the Bluetooth code to better support BLE
 - Console command: "set_bluetooth_enabled" renamed to "set_incoming_connections_enabled"
 
 ### Fixed
+
 - "disconnect" console command also deletes the connected device
 
 ## [v3.6.0-rc0] - 2023-01-16
+
 ### New
+
 - Platforms: Receive "controller" instead of "gamepad". A controller can be a:
   gamepad, mouse, keyboard, balance board. And possible more. Battery is reported
   in the new Controller API.
@@ -628,6 +897,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is still working, but the client calls the new one.
 
 ### Changed
+
 - ESP-IDF: Added support for v5.0 but:
   - Arduino still requires v4.4 until esp32-core supports v5.0
   - NINA requires Legacy Flash SPI that was removed in v5.0
@@ -636,6 +906,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 8BitDo: Updated support for SN30 Pro FW v2 and M30
 
 ### Fixed
+
 - Unijoysticle: "cycle" button works correctly when mouse and gamepad are
   connected at the same time.
 - Switch, DualShock4, DualSense, Wii Balance Board: report battery status ([Github Issue #25][github_issue_25])
@@ -643,29 +914,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [github_issue_25]: https://github.com/ricardoquesada/bluepad32/issues/25
 
 ## [v3.5.2] - 2022-12-04
+
 ### New
+
 - Arduino: Add "version" console command
 - NINA/AirLift: Add command to disconnect gamepad ([Github Issue #26][github_issue_26])
 - Console: Add "disconnect" command
 - Console: Add "gpio_get", "gpio_set" commands. Useful for testing
 
 ### Changed
+
 - BTstack: Updated to v1.5.4
 - ESP-IDF: Tested with release/v4.4 hash (9269a536ac123677b165ff531369dfd1338ef103)
 
 ### Fixed
+
 - Bluetooth state machine: Don't update name if connection is already established ([Issue #21][gitlab_bug_21])
 - Doc: Update instructions about flashing Bluepad32 on UNI WiFi Rev.2
-       Improved instructions regarding how to program the ESP32
+  Improved instructions regarding how to program the ESP32
 
 [github_issue_26]: https://github.com/ricardoquesada/bluepad32/issues/26
 [gitlab_bug_21]: https://gitlab.com/ricardoquesada/bluepad32/-/issues/21
 
 ## [v3.5.1] - 2022-09-06
+
 ### Changed
+
 - ESP-IDF: Using v4.4.2 hash 6d7877fcb8dda2ad971880b4e7ceda5b53c54019
 
 ### Fixed
+
 - Unijoysticle can swap ports with "Select" button, in addition to the already suported "Home" button ([Github Issue #20][github_issue_20])
 - Xbox: Don't enable left/right actuators for rumble.
   Trigger-right and Trigger-left actuatores are still enabled.
@@ -675,17 +953,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [gitlab_uni_issue_10]: https://gitlab.com/ricardoquesada/unijoysticle2/-/issues/10
 
 ## [v3.5.0] - 2022-07-09
+
 ### New
+
 - Console commands: New `list_bluetooth_keys` and `del_bluetooth_keys`
 
 ### Changed
+
 - Console commands: Rename `devices` to `list_devices`
 
 ### Fixed
+
 - Bluetooth LED works as expected in Unijoysticle
 
 ## [v3.5.0-rc0] - 2022-07-04
+
 ### New
+
 - Mouse: Added support for:
   - LogiLink ID0078A
 - Unijoysticle console commands:
@@ -696,9 +980,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Wii: Add support for Wii Balance Board
 
 ### Changed
+
 - Console:
   - `set_mouse_scale(value)` where a higher value means faster movement.
-     Before it meant "higher value == slower movement"
+    Before it meant "higher value == slower movement"
   - `version` shows Unijoysticle, Bluepad32 and Chip info
 - Unijoysticle2 A500:
   Bluetooth LED is also used as status:
@@ -719,7 +1004,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [github_issue_21]: https://github.com/ricardoquesada/bluepad32/issues/21
 
 ## [3.5.0-beta1] - 2022-06-17
+
 ## New
+
 - Arduino: Add "Console" class. An alternative to Arduino "Serial" that is
   compatible with Bluepad32's USB console.
 - Property storage abstraction
@@ -737,7 +1024,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated list of [supported mice][supported_mice]
 
 ## [3.5.0-beta0] - 2022-05-30
+
 ### New
+
 - Mouse support:
   Bluetooth BR/EDR mice supported. Only a few are supported at the moment.
   This is to fine-tune the DPI. Mouse data is populated in the gamepad structure:
@@ -746,8 +1035,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Right button: B
   - Middle button: X
 - Mouse: Added "quadrature encoder" driver. Supports up to two
-   mice at the same time. Each mouse requires 2 timers. So if two mice are used
-   at the same time, that means that there are no HW timers left.
+  mice at the same time. Each mouse requires 2 timers. So if two mice are used
+  at the same time, that means that there are no HW timers left.
 - Unijoysticle: Supports Amiga/AtariST mouse. Two mice can be used at the same time.
   - Unijoysticle v2+ / v2 A500: fully functional mouse on both ports
   - Unijoysticle v2: fully functional mouse on Port #1. Right/Middle button not available on Port #2
@@ -769,12 +1058,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [supported_mice]: https://gitlab.com/ricardoquesada/bluepad32/-/blob/develop/docs/supported_mice.md
 
 ### Changed
+
 - Unijoysticle v2: Added support for 2nd and 3rd button in Joystick #1.
 - Unijoysticle v2+: Swap 2nd with 3rd button.
   - X is 2nd joystick button
   - Y is 3rd joystick button
 
 ### Fixed
+
 - DualSense/DualShock: reconnect works Ok [Bug #14][gitlab_bug_14]
 - Nintendo Switch Pro/JoyCon: reconnect works Ok [Bug #15][gitlab_bug_15]
 
@@ -782,22 +1073,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [gitlab_bug_15]: https://gitlab.com/ricardoquesada/bluepad32/-/issues/15
 
 ## [3.1.1] - 2022-04-22
+
 ### Fixed
+
 - NINA/AirLift: Binaries are generated with UART console disabled. [Bug bp32-arduino #3][gitlab_bp32_arduino_03]
-   UART console can be enabled/disabled from menuconfig and only when NINA/AirLift are not selected.
+  UART console can be enabled/disabled from menuconfig and only when NINA/AirLift are not selected.
 - Cleanup connect/disconnect code
 - pc_debug: Enable extra compiler-warnings to check possible bugs
 
 [gitlab_bp32_arduino_03]: https://gitlab.com/ricardoquesada/bluepad32-arduino/-/issues/3
 
 ## [3.1.0] - 2022-04-14
+
 ### New
+
 - Wii: Add support for Rumble
 - Arduino,AirLift,NINA: Add support for "get gamepad properties" and
   "enable Bluetooth connections"
 - Gamepad: Add support for Nintendo SNES (Swicth Online)
 
 ### Changed
+
 - 8BitDo: "Dinput" mode mappings updated to match the other modes' mappings:
   Button "-" / "select" maps to BUTTON_BACK
   Button "+" / "start" maps to BUTTON_HOME
@@ -816,6 +1112,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or when in "Enhanced Mode". Re-enable when that's not the case.
 
 ### Fixed
+
 - Arduino/NINA/AirLift: Assign gamepad type at connection time: [Bug #10][gitlab_bug_10]
 - Compile-time error if ACL connections are not least 2 [Bug #11][gitlab_bug_11]
 - "Enable/Disable Bluetooth connections" works everytime it is called.
@@ -824,29 +1121,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [gitlab_bug_11]: https://gitlab.com/ricardoquesada/bluepad32/-/issues/11
 
 ## [3.0.1] - 2022-03-15
+
 ### New
+
 - Arduino: Add function to return Gamepad model
 
 ### Changed
+
 - Update BTStack to latest stable. Hash: 45e937e1ce34444aabbc21ec35504e1c50ad528d
 - Compiler option: Using -O2 (optimize for performance) by default. Debug disabled.
 
 ### Fixed
+
 - 8BitDo: Added SF30 Pro to the DB. It correctly identifies it as 8BitDo gamepad.
 
 ## [3.0.0] - 2022-02-27
+
 ### New
+
 - Docs: Added CONTRIBUTING.md file
 
 ### Changed
+
 - Update ESP-IDF v4.4 to hash: 000d3823bb2ff697c327958e41e9dfc6b772822a
 
 ### Fixed
+
 - Docs: Minor fixes in documentation, moved images to its own folder.
 - 8BitDo: Added SFC30 to the DB. It correctly identifies it as 8BitDo gamepad.
 
 ## [3.0.0-rc1] - 2022-02-06
+
 ### Changed
+
 - Bluetooth: To err on the safe side, new connection have a bigger window time to connect,
   and re-connects (incoming connections) a slightly smaller window. I'll revisit this in the future.
 - Wii: Accelerometer mode works as if the Wii Remote is being inside a Wii Wheel.
@@ -854,6 +1161,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Wii Whell is very usable in C64 racing games.
 
 ### Fixed
+
 - Bluetooth: use page scan / clock offset if available when requesting name.
   This used to be the case in v2.5, but disabled during the big refactoring.
 - Unijoysticle: correclty set Player LED when second player connects
@@ -867,7 +1175,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MightyMiggy: All internal functions declared static to avoid collision with other projects.
 
 ## [3.0.0-rc0] - 2022-01-31
+
 ### New
+
 - Devices: Support for feature reports.
 - DualSense / DualShock 4: add support for get firmware version and calibration values.
   Although calibration is ignored ATM.
@@ -879,8 +1189,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Missing save/restore, BLE service. Consider it WIP.
 
 ### Changed
+
 - DualSense: Player LEDs are reported in the same way as PlayStation 5.
-- Switch: Don't turn ON Home Light,  8BitDo devices don't support it,
+- Switch: Don't turn ON Home Light, 8BitDo devices don't support it,
   and might break the gamepad setup sequence.
   Change order of setup commands.
   Change mappings in JoyCons so that it is possible to press "System" button.
@@ -891,7 +1202,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - uni_hid_parser() -> uni_hid_parse_input_report()
   - report_parse_raw_fn_t -> report_parse_input_report_fn_t
 - These functions are "safe". Can be called from another task and/or CPU.
-  The suffix "_safe" were added to their names:
+  The suffix "\_safe" were added to their names:
   - uni_bluetooth_del_keys()
   - uni_bluetooth_enable_new_connections()
 - Arduino: Seat assignment simplified.
@@ -918,6 +1229,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tested with latest ESP-IDF v4.4 (eb3797dc3ffebd9eaf873a01df63aed89fad58b6)
 
 ### Fixed
+
 - Bluetooth: add log about Feature Report not being supported ATM.
 - Bluetooth: Incoming connections are more reliable. Using HCI periodic inquiry mode.
 - Bluetooth: fix when parsing device name. Does not reuse previous discovered device.
@@ -927,13 +1239,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Fixed mappings of button "+" in report 0x30.
 
 ## [2.5.0] - 2022-01-08
+
 ### New
+
 - tools/pc_debug: Integrate into Gitlab CI
 - tools/fw: add --clean argument to build.py
 - uni_bluetooth: add uni_bluetooth_set_enabled().
   Allows users to enable/disable accepting new gamepads in runtime.
 
 ### Changed
+
 - Update BTStack to 1.5.1. Using hash: d778e7488c62d361fc176e8ae40c0d6bc8b00089
 - Doc: Updated to use idf.py instead of make
 - tools/fw: build.py uses idf.py instead of make
@@ -941,13 +1256,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Default changed from 8 to 4.
 
 ### Fixed
+
 - NINA/AirLift:
   - Disconnect works as expected.
   - Replaced custom "queue" code with FreeRTOS xQueue
 - tools/fw: Remove sdkconfig before building another platform
 
 ## [2.4.0] - 2021-12-26
+
 ### New
+
 - Arduino platform:
   This time for real. Generic ESP32 modules are supported.
   It is possible to have Bluepad32 + Arduino in a generic ESP32 module.
@@ -958,6 +1276,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - BLE: WIP. For the moment it is disabled.
 
 ### Changed
+
 - Update BTStack. Using hash: 0f2a810173d1d70943d1c915bffd6f9b1171e8f6
 - Update ESP-IDF to latest v4.3 version. Using hash: da6c5be6c15e1c1854d91787fa166f426568d678
 - idf.py: uses new ESP-IDF cmake functions, works as intented
@@ -969,28 +1288,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - clang-format: switched to 4-space indent, 120-column-width
 
 ### Fixed
+
 - crc32_le() fixed. ESP32 does not call our code. Fixes core dumps and other related crc32 features.
 - Unijoysticle: Turn off LEDs when gamepad disconnects.
 - core: When a gamepad disconnects, it resets it state, allowing re-connecting it again (issue #1)
 
 ## [2.3.0] - 2021-11-13
+
 ### Changed
+
 - Unijoysticle: Gamepad 2nd & 3rd buttons swap. "X" is 2nd button, and "Y" is 3rd button
 - Update gamepad database from SDL. Using hash: 7dfd22ac5ef60c730d7900053b64e8430e08a29d
 - Update BTStack. Using hash: 4ac37295456dc9203a99c17ee4649b7e06238983
 - Update ESP-IDF to latest v4.2 version. Using hash: 047a5bf2f7e121077740e7ea59e616718d417fed
 
 ## [2.2.1] - 2021-07-24
+
 ### Added
+
 - NINA/AirLift: Add "Connection Status" method so that WiFiNINA's CheckFirmwareVersion
-                sketch works unmodified.
+  sketch works unmodified.
 
 ### Changed
+
 - NINA/AirLift: Return "1" (instead of "0") when transaction is Ok.
 - NINA/AirLift: Improved documentation
 
 ## [2.2.0] - 2021-07-17
+
 ### Added
+
 - New platform: NINA.
   - Boards like Arduino Nano RP2040 Connect are supported
   - Airlift & NANO share the same code.
@@ -998,14 +1325,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     Adafruit Airlift firmware
 
 ### Changed
+
 - Using bstack v1.4.1
 
 ## [2.1.0] - 2021-06-25
+
 ### Added
+
 - Nintendo JoyCon support: Both Left and Right JoyCons are supported.
-      Each one is its own controller. Should be used in Horizontal position.
+  Each one is its own controller. Should be used in Horizontal position.
 
 ### Changed
+
 - Using esp-idf v4.2
 - Using bstack v1.4
 - Nintendo Switch:
@@ -1013,27 +1344,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Code is cleaner, easier to read.
 
 ### Fixed
+
 - Improved Android gamepad support, including support for SteelSeries Stratus Duo
 
 ## [2.0.0] - 2021-05-23
+
 ### Changed
+
 - No changes. Just renamed v2.0.0-rc0 to v2.0.0
 
 ## [2.0.0-rc0] - 2021-04-09
+
 ### Added
+
 - New platform: MightyMiggy, a new platform that targets Commodore Amiga
 - uni_hid_device: controller_subtype: populated by each "driver".
-                  Sets in which "mode" or which attachment the driver has.
-                  For the moment only used for Wii attachments.
+  Sets in which "mode" or which attachment the driver has.
+  For the moment only used for Wii attachments.
 - device_vendors: VID/PID for 8bitdo Zero 2 and TUTUO (a PS4 clone)
 - ds4: explicitly require Stream mode at setup time.
 
 ## [2.0.0-beta2] - 2021-01-14
+
 ### Added
+
 - DualSense: Supports lightbar LED + player LEDs + rumble
 - Wii / Wii U: Supports '-' button to mappings
 
 ### Changed
+
 - Wii: Improved mappings while WiiMote is in "vertical" mode
 - Parser: rename some functions. Now the follow the "standard" names:
   - set_leds -> set_player_leds
@@ -1042,6 +1381,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - DualSense/DS4/DS3: simplified code, easier to read & maintain
 
 ### Fixed
+
 - DualShock4: Rumble duration works Ok
 - DualShock3: Rmble + LED work at the same time
 - Switch: Rumble duration works Ok
@@ -1049,6 +1389,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [quico]: https://gitlab.com/ricardoquesada/quico
 
 ## [2.0.0-beta1] - 2020-11-30
+
 - uni_bluetooth: added "auto-delete" to prevent having "orphan" connections forever
 - AirLift:
   - Multi-core code fixed.
@@ -1070,14 +1411,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Bluetooth Controller: BR/EDR Sync (SCO/eSCO) Max Connections: 3 (max value)
 
 ## [2.0.0-beta0] - 2020-11-20
+
 - Firmware: Added support Sony DualSense (PS5) and DualShock3 (PS3) gamepads
 - Platform: Added support for AirLift family of modules
 - Refactor: Move platform logic to "platforms". Uni_hid_device is simpler,
-        less error-prone. Platforms should implement their own logic.
-        Added more events to platforms like connect, disconnect, ready.
+  less error-prone. Platforms should implement their own logic.
+  Added more events to platforms like connect, disconnect, ready.
 - Misc: Firmware extracted from Unijoysticle2 project and make it its own
-        project. Easier for other non-unijoysticle user to integrate into their
-        own projects. New name for the firmware: "bluepad32".
+  project. Easier for other non-unijoysticle user to integrate into their
+  own projects. New name for the firmware: "bluepad32".
 - tools:
   - Compiles & updated to new BTstack code
   - Added "circuitpython_paint.py": Example of how to use Bluepad32 with
@@ -1086,15 +1428,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ESP-IDF: Using v4.1
 
 ## [1.1.0] - 2020-07-23
+
 - Firmware: Nintendo Wii/Wii U: auth works as expected.
 - Firmware: use gap_pin_code_response() to send Pin codes.
-            iCade + Nintendo Wii works in any situation.
+  iCade + Nintendo Wii works in any situation.
 - Firmware: "idf.py build" fixed
 - Firmware: Gamepad Reconnection works.
 - ESP-IDF: Using v4.1-beta2 - c5cb44d8135a5ec6678259e30468632bc2442288
 - BTstack: Using develop 2020-07-23 - 2992f73460b28b1f150ed983204620fbe35503bc
 
 ## [1.0.0] - 2020-02-29 (abuelito Ricardo release)
+
 - Firmware: Nintendo Switch Pro: turns on LED when connected
 - Firmware: Where applicable, added technical info references at top of .c files
 - Firmware: Renamed PS4 to DS4 (DUALSHOCK4)
@@ -1111,7 +1455,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Data destination: UART
 
 ## [0.5.4] - 2020-02-23
+
 ### Added
+
 - Firmware: Nintendo Switch Pro uses "raw" parser instead of HID, making it more flexible.
 - Firmware: Nintendo Switch Pro clones supported.
 - Firmware: Nintendo Switch Pro uses factory calibration data to align sticks.
@@ -1119,139 +1465,182 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Firmware: updated controllers DB from SDL
 
 ## [0.5.3] - 2020-02-09
+
 ### Added
+
 - Firmware: Nintendo Switch Pro: Original Nintendo Switch Pro works.
 - Firmware: Nintendo Switch Pro: LEDs are being set.
 - Firmware: DualShock 4: LEDs are being set. Uses HID report type 0x11 by default.
 
 ### Changed
+
 - Firmware: MTU changed from 48 to 128 bytes. Needed for report 0x11 in DualShock4.
 - Firmware: Linux version compiles with clang by default.
 - Firmware: Added missing 'break' in OUYA and Generic drivers, making them more reliable.
 
 ## [0.5.2] - 2020-02-01
+
 ### Added
+
 - Firmware: Xbox One: added support for firmware v4.8.
 
 ## [0.5.1] - 2020-01-03
+
 ### Added
+
 - Firmware: Xbox One: rumbles when connected or switches joystick port.
 - Firmware: ESP-IDF v3.3.1
 - Firmware: SDP queries timeout after 3 seconds, enabling another SDP query to start.
 - Firmware: improved logging
 
 ## [0.5] - 2019-12-15
+
 ### Added
+
 - Firmware: Wii Remote 1st gen correctly detects attached extensions like the
-            Nunchuk and Classic Controller.
+  Nunchuk and Classic Controller.
 - Docs: firmware setup doc has info about Windows and includes some screenshots.
 
 ## [0.5-rc2] - 2019-12-14
+
 ### Added
+
 - Firmware: Support for Nintendo Wii Classic Controller / Classic Controller Pro
 
 ### Changed
+
 - Firmware: After swapping the joysticks ports, the joysticks lines are "Off".
-            Prevents leaving unexpected lines as "On".
+  Prevents leaving unexpected lines as "On".
 - Firmware: Wii driver: clean up code. Added "instance" concept, easier to mantain.
 
 ## [0.5-rc1] - 2019-12-09
+
 ### Added
+
 - Firmware: Added support for Nintendo Wii Nunchuk
 - Firmware: PC platform: added support for "delete keys" and "enable enhanced mode"
-            via command line.
+  via command line.
 
 ### Changed
+
 - Firmware: Auto-fire in enhanced mode is swapped.
-            Button "Shoulder Left" triggers auto-fire in to Joy A.
-            Button "Shoulder Right" triggers auto-fire in Joy B.
+  Button "Shoulder Left" triggers auto-fire in to Joy A.
+  Button "Shoulder Right" triggers auto-fire in Joy B.
 - Firmware: Improved debug logging in "PC platform".
 - Firmware: Code is more readable in uni_gamepad.c.
 - Firmware: When two controllers are connected, the two LEDs are turned on.
 
 ## [0.5-rc0] - 2019-12-06
+
 ### Added
+
 - Firmware: Added support for Nintendo Switch Pro controller.
 - Firmware: Improved 8Bitdo gamepad support (SN30 Pro & Lite).
 - Firmware: BTStack f07720a033c9fcfa856511634253b9889fa94cd8 (2019-12-6)
 
 ## [0.5-beta2] - 2019-11-17
+
 ### Changed
+
 - Firmware: iCade 8-bitty fixed shoulder-left / start button mappings.
 - Firmware: Print to console whether single-port / 3-button mode is enabled.
 
 ## [0.5-beta1] - 2019-11-10
+
 ### Added
+
 - Firmware: Added support for "single joystick" unijoysticle devices.
-            Edit `uni_config.h` and change `UNIJOYSTICLE_SINGLE_PORT` to 1
+  Edit `uni_config.h` and change `UNIJOYSTICLE_SINGLE_PORT` to 1
 - Firmware: Added support for iCade 8-bitty gamepad.
 
 ### Changed
-- Firmware: Improved iCade Cabinet support:  autofire, debug and shoulder buttons supported.
+
+- Firmware: Improved iCade Cabinet support: autofire, debug and shoulder buttons supported.
 - Firmware: ESP-IDF v3.3
 - Firmware: BTStack 138818a33e591e964a727284c192700abe2fee26 (2019-9-9)
 
 ## [0.4] - 2019-09-28
+
 ### Changed
+
 - Firmware: Fix: Can enter combo Joy-Joy when there are disconnected devices.
 
 ## [0.4-rc0] - 2019-08-12
+
 ### Added
+
 - Firmware: Support for Nintendo Wii Remote Motion Plus controller.
 - Firmware: Support for "accelerometer mode" in Nintendo Wii Remote.
 - Firmware: Support for "vertical mode" in Nintendo Wii Remote.
 
 ### Changed
+
 - Firmware: Fix crash when printing "cannot swap joystick"
 - Firmware: Compile ESP-IDF as Release build.
 - Docs: Improved "supported devices".
 
 ## [0.3] - 2019-08-05
+
 ### Added
+
 - Firmware: Nintendo Wii controller LED's represent the joystick port assigned to.
 
 ### Changed
+
 - Firmware: Nintendo Wii controller uses "horizontal" orientation setup.
 - Firmware: Nintendo Wii U has Y axis working correctly.
 
 ## [0.3-rc0] - 2019-08-03
+
 ### Added
+
 - Firmware: Add Nintendo Wii generic support. This includes
   - Wii U Pro controller
   - Wii Remote
   - Possibly other Nintendo Wii controllers
 
 ### Changed
+
 - Firmware: Nintendo Wii U Pro support: Works Ok on ESP32.
 - Firmware: Bluetooth state machine. Code clean-up. It is easier to mantain.
 - Firmware: Using BTstack master-branch. Commit: dbb3cbc198393187c63748b8b0ed0a7357c9f190
 
 ### Removed
+
 - Firmware: Name discovery disabled for the moment
 
 ## [0.3-beta] - 2019-07-27
+
 ### Added
+
 - Firmware: Added Wii U Pro controller support.
 
 ### Changed
+
 - Firmware: Using ESP-IDF v3.2.2
 - Firmware: Using BTstack develop-branch. Commit: a4ea32feba8ca8a16509a75d3d80e8017ca2cf3b
 
 ## [0.2.1] - 2019-06-29
+
 ### Added
+
 - Firmware: more verbose logs when detecting the type of device
 - Firmware: Started Wii U Pro controller support. Not working yet.
 
 ### Changed
+
 - Firmware: Gamepad names are fetched correctly.
 - Firmware: Using BTstack develop-branch. Commit: 32b46fec1df77000b2e383d209074f4c2866ebdf
 - Firmware: "apple" parser renamed to "nimbus" parser.
 
 ## [0.2.0] - 2019-05-22
+
 ### Added
+
 - Docs: User guide
 
 ### Changed
+
 - Firmware: Combo-mode:
   - Turn on both LEDs when enabled.
   - When back from combo-mode, restore previously used port
@@ -1274,7 +1663,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Firmware: Using BTstack develop-branch. Commit: 4ce43359e6190a70dcb8ef079b902c1583c2abe4
 
 ## [0.1.0] - 2019-04-15
+
 ### Added
+
 - Firmware: v0.1.0
   - Using ESP-IDF v3.1.3. Commit: cf5dbadf4f25b395887238a7d4d8251c279afa8c
   - Using BTstack develop-branch. Commit: 8b22c04ddc425565c8e4002a6d4d26a53426a31f

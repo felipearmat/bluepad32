@@ -5,12 +5,13 @@
 #ifndef UNI_H
 #define UNI_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-// An include file that includes all files.
-// Useful for 3rd party developers that only care about including just one file.
+/**
+ * @file uni.h
+ * @brief Umbrella header for the Bluepad32 API.
+ *
+ * Includes all essential headers needed to initialize and interact with Bluepad32.
+ * Useful for 3rd party developers that only care about including just one file.
+ */
 
 #include "sdkconfig.h"
 
@@ -42,10 +43,13 @@ extern "C" {
 #include "parser/uni_hid_parser_switch.h"
 #include "parser/uni_hid_parser_switch2.h"
 #include "parser/uni_hid_parser_wii.h"
+#include "parser/uni_hid_parser_rumble.h"
 #include "parser/uni_hid_parser_xboxone.h"
 #include "platform/uni_platform.h"
+#include "uni_btstack_version_compat.h"
 #include "uni_circular_buffer.h"
 #include "uni_console.h"
+#include "uni_error.h"
 #include "uni_hid_device.h"
 #include "uni_init.h"
 #include "uni_joystick.h"
@@ -54,6 +58,10 @@ extern "C" {
 #include "uni_property.h"
 #include "uni_utils.h"
 #include "uni_virtual_device.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #ifdef __cplusplus
 }

@@ -1,0 +1,423 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Ricardo Quesada
+// http://retro.moe/unijoysticle2
+
+/**
+ * @file posix_imgui_platform.h
+ * @brief Thread-safe Bluepad32 custom platform and cross-thread synchronization bridge.
+ *
+ * Architectural Role & Threading Model:
+ *   Bluepad32 and BTstack are strictly single-threaded and execute on a dedicated
+ *   background worker thread (`Thread 2`: `btstack_run_loop_execute()`), whereas
+ *   GLFW, OpenGL3, and Dear ImGui must execute on the main thread (`Thread 1`).
+ *
+ *   This header defines the lock-protected telemetry snapshot table (Thread 2 -> Thread 1)
+ *   and the asynchronous, pipe-woken command queue API (Thread 1 -> Thread 2) that
+ *   decouple 60 Hz UI rendering from sub-millisecond Bluetooth packet processing:
+ *
+ *   - Telemetry Path (BTstack Thread -> UI Thread):
+ *     `uni_platform` callbacks (`on_device_ready`, `on_controller_data`,
+ *     `on_device_disconnected`) update an internal `ControllerSnapshot` table under
+ *     `g_state_mutex`. The UI thread copies all 4 slots atomically once per frame via
+ *     `posix_imgui_get_snapshots()`.
+ *
+ *   - Command Path (UI Thread -> BTstack Thread):
+ *     UI button handlers invoke `posix_imgui_request_*()`, which append a command
+ *     under `g_cmd_mutex` and wake the BTstack POSIX `select()` loop via
+ *     `btstack_run_loop_execute_on_main_thread()`.
+ */
+
+#pragma once
+
+// Standard C++ headers MUST be included outside and before `extern "C"` so C++
+// standard library declarations are never trapped inside C linkage.
+#include <cstdint>
+#include <span>
+#include <type_traits>
+
+extern "C" {
+#include <uni.h>
+}
+
+/// Maximum number of concurrent Bluetooth controllers supported (4 seats: #1..#4).
+constexpr int kMaxControllers = CONFIG_BLUEPAD32_MAX_DEVICES;  // 4
+
+/**
+ * @brief Visual face-button layout classification for the 2D gamepad canvas.
+ *
+ * Determines how physical button bitmasks map to the North/South/East/West face-button
+ * labels and positions in the Controls tab.
+ */
+enum ControllerLayoutType {
+    /// Xbox / Generic layout: A (South), B (East), X (West), Y (North).
+    CONTROLLER_LAYOUT_STANDARD = 0,
+    /// PlayStation layout: Cross (South), Circle (East), Square (West), Triangle (North).
+    CONTROLLER_LAYOUT_SHAPES,
+    /// Nintendo Switch layout: B (South), A (East), Y (West), X (North).
+    CONTROLLER_LAYOUT_REVERSE,
+};
+
+/**
+ * @brief Per-device platform instance data stored inside `uni_hid_device_t::platform_data`.
+ *
+ * Note: `uni_hid_device_init()` zero-initializes the entire `uni_hid_device_t` struct via
+ * `memset`. To prevent a pre-ready disconnect (or a rejected 5th controller) from falsely
+ * matching Slot 0, `on_device_connected()` explicitly initializes `slot = -1` and
+ * `gamepad_seat = GAMEPAD_SEAT_NONE`.
+ */
+struct posix_imgui_instance_t {
+    int slot;  ///< Assigned controller slot in `[0, kMaxControllers - 1]`, or `-1` if unassigned.
+    uni_gamepad_seat_t gamepad_seat;  ///< Assigned Bluepad32 seat mask (`GAMEPAD_SEAT_A`..`D`), or `GAMEPAD_SEAT_NONE`.
+};
+
+/**
+ * @brief Point-in-time snapshot of a single controller slot's metadata, capabilities, and input state.
+ *
+ * Copied by value from the BTstack thread's state table into the Dear ImGui UI thread
+ * once per frame via `posix_imgui_get_snapshots()`.
+ */
+struct ControllerSnapshot {
+    bool connected;                               ///< True if a ready controller currently occupies this slot.
+    uint16_t vendor_id;                           ///< USB/Bluetooth Vendor ID (e.g., `0x054c` for Sony).
+    uint16_t product_id;                          ///< USB/Bluetooth Product ID (e.g., `0x0ce6` for DualSense).
+    uni_controller_type_t controller_type;        ///< Bluepad32 controller model identifier.
+    uni_controller_subtype_t controller_subtype;  ///< Bluepad32 controller subtype (e.g., Wiimote extension type).
+    char name[HID_MAX_NAME_LEN];                  ///< Bluetooth device name reported during discovery/SDP.
+    char model_name[64];                          ///< Human-readable model string from `uni_gamepad_get_model_name()`.
+    /// Parser-specific hardware/firmware summary from `report_parser.device_extra_info`
+    /// (e.g., `"FW version 0x412, HW version 0x100"` or `"FW version 4.33"`), or `""` if unavailable.
+    /// Refreshed in both `on_device_ready()` and `on_controller_data()` to capture async updates.
+    char device_extra_info[128];
+    bd_addr_t btaddr;  ///< 6-byte Bluetooth MAC address of the controller.
+    uint8_t rssi;      ///< Latest Bluetooth RSSI reading (`int8_t` cast to `uint8_t`).
+
+    // Capabilities populated in on_device_ready()
+    ControllerLayoutType layout;  ///< Face button layout family (`STANDARD`, `SHAPES`, or `REVERSE`).
+    bool is_virtual_device;       ///< True if `uni_hid_device_is_virtual_device(d)` (e.g., DS4/DS5 touchpad mouse).
+    bool has_rumble;              ///< True if `d->report_parser.play_dual_rumble != nullptr`.
+    bool has_player_leds;         ///< True if `d->report_parser.set_player_leds != nullptr`.
+    bool has_rgb_led;             ///< True if `d->report_parser.set_lightbar_color != nullptr`.
+    bool has_brightness_led;      ///< True if `d->report_parser.set_led_brightness != nullptr`.
+    bool has_imu;                 ///< True if the controller family provides 6-axis IMU telemetry.
+
+    // Live telemetry updated in on_controller_data()
+    uni_controller_t controller;        ///< Latest parsed Bluepad32 controller state (buttons, axes, IMU, battery).
+    uint64_t last_report_timestamp_us;  ///< Monotonic timestamp (`std::chrono::steady_clock`, microseconds) of latest
+                                        ///< report.
+    uint32_t report_delta_ms;           ///< Elapsed milliseconds between the two most recent input reports.
+};
+
+// Ensure ControllerSnapshot remains trivially copyable for fast cross-thread snapshot copies.
+static_assert(std::is_trivially_copyable_v<ControllerSnapshot>, "ControllerSnapshot must remain trivially copyable.");
+
+/**
+ * @brief Bitmask flags selecting which physical Bluetooth input device categories are
+ *        auto-accepted during discovery (`on_device_discovered`) and readiness (`on_device_ready`).
+ */
+enum PosixImguiDeviceTypeFlags : uint32_t {
+    POSIX_IMGUI_DEVICE_TYPE_NONE = 0u,
+    /// Gamepads, joysticks, and gaming controllers (`UNI_BT_COD_MINOR_GAMEPAD | UNI_BT_COD_MINOR_JOYSTICK`).
+    POSIX_IMGUI_DEVICE_TYPE_GAMEPAD = (1u << 0),
+    /// Physical Bluetooth mice (`UNI_BT_COD_MINOR_MICE`).
+    POSIX_IMGUI_DEVICE_TYPE_MOUSE = (1u << 1),
+    /// Physical Bluetooth keyboards (`UNI_BT_COD_MINOR_KEYBOARD`).
+    POSIX_IMGUI_DEVICE_TYPE_KEYBOARD = (1u << 2),
+    /// Default auto-accept filter: only Gamepads & Joysticks enabled.
+    POSIX_IMGUI_DEVICE_TYPE_DEFAULT = POSIX_IMGUI_DEVICE_TYPE_GAMEPAD,
+};
+
+/**
+ * @brief Returns the singleton custom `uni_platform` descriptor to register via
+ *        `uni_platform_set_custom()` before calling `uni_init()`.
+ *
+ * @return Non-null pointer to the static `uni_platform` struct.
+ */
+[[nodiscard]] struct uni_platform* get_posix_imgui_platform(void);
+
+/**
+ * @brief Retrieves the `posix_imgui_instance_t` embedded in `d->platform_data`.
+ *
+ * @param d Pointer to a Bluepad32 `uni_hid_device_t` instance (must not be null).
+ * @return Pointer to the per-device `posix_imgui_instance_t`.
+ */
+[[nodiscard]] posix_imgui_instance_t* get_posix_imgui_instance(uni_hid_device_t* d);
+
+/**
+ * @brief Thread-safe C++23 `std::span` snapshot reader called by the Dear ImGui UI thread (Thread 1).
+ *
+ * Copies all `kMaxControllers` slots under `g_state_mutex`. If a controller completed
+ * `on_device_ready()` since the previous call to `posix_imgui_get_snapshots()`, writes its
+ * slot index (`0..3`) to `*newly_connected_slot` and resets the internal latch to `-1`
+ * so the UI tab bar can auto-select the newly connected controller for one frame.
+ *
+ * Why two overloads exist:
+ *   This fixed-extent `std::span<ControllerSnapshot, kMaxControllers>` overload provides
+ *   compile-time bounds safety for `std::array` callers and supplies the default
+ *   `newly_connected_slot = nullptr` parameter. The companion pointer overload below
+ *   omits the default parameter so single-argument calls never suffer overload ambiguity,
+ *   while still allowing callers to pass `out_snapshots = nullptr` when only polling
+ *   `newly_connected_slot`.
+ *
+ * Example:
+ * @code
+ * std::array<ControllerSnapshot, kMaxControllers> snapshots{};
+ * int new_slot = -1;
+ * posix_imgui_get_snapshots(std::span{snapshots}, &new_slot);
+ * @endcode
+ *
+ * @param[out] out_snapshots        Fixed-extent `std::span` of `kMaxControllers` elements.
+ * @param[out] newly_connected_slot Receives the newly connected slot (`0..3`) or `-1` (may be null).
+ */
+void posix_imgui_get_snapshots(std::span<ControllerSnapshot, kMaxControllers> out_snapshots,
+                               int* newly_connected_slot = nullptr);
+
+/**
+ * @brief Thread-safe pointer/array snapshot reader overload (supports `out_snapshots == nullptr`
+ *        when only polling `newly_connected_slot`).
+ *
+ * @param[out] out_snapshots        Destination array of size `kMaxControllers` (may be null).
+ * @param[out] newly_connected_slot Receives the newly connected slot (`0..3`) or `-1` (may be null).
+ */
+void posix_imgui_get_snapshots(ControllerSnapshot out_snapshots[kMaxControllers], int* newly_connected_slot);
+
+/**
+ * @brief Enqueues an asynchronous dual-motor rumble command from the UI thread (Thread 1).
+ *
+ * Thread-safe and non-blocking. Appends a `RumbleCmd` entry under `g_cmd_mutex` and
+ * wakes the BTstack run loop via `btstack_run_loop_execute_on_main_thread()`. Pass
+ * `duration_ms = 0`, `weak_magnitude = 0`, `strong_magnitude = 0` to stop active vibration.
+ *
+ * @param slot             Controller slot index in `[0, kMaxControllers - 1]`.
+ * @param start_delay_ms   Delay before starting vibration in milliseconds (`0..1000`).
+ * @param duration_ms      Vibration duration in milliseconds (`0..5000`).
+ * @param weak_magnitude   High-frequency (weak) motor intensity (`0..255`).
+ * @param strong_magnitude Low-frequency (strong) motor intensity (`0..255`).
+ */
+void posix_imgui_request_rumble(int slot,
+                                uint16_t start_delay_ms,
+                                uint16_t duration_ms,
+                                uint8_t weak_magnitude,
+                                uint8_t strong_magnitude);
+
+/**
+ * @brief Enqueues an asynchronous Player Indicator LED bitmask update from the UI thread (Thread 1).
+ *
+ * Thread-safe and non-blocking. Only the lower 4 bits (`leds_bitmask & 0x0f`) are forwarded
+ * to `d->report_parser.set_player_leds(d, mask)` on the BTstack thread.
+ *
+ * @param slot         Controller slot index in `[0, kMaxControllers - 1]`.
+ * @param leds_bitmask 4-bit LED bitmask (e.g., `0x01` for LED 1, `0x0f` for all 4 LEDs).
+ */
+void posix_imgui_request_player_leds(int slot, uint8_t leds_bitmask);
+
+/**
+ * @brief Enqueues an asynchronous single-channel LED brightness update from the UI thread (Thread 1).
+ *
+ * Thread-safe and non-blocking. Appends a `LedBrightnessCmd` entry under `g_cmd_mutex` and
+ * wakes the BTstack run loop to invoke `d->report_parser.set_led_brightness(d, brightness)`
+ * on supporting controllers (e.g., Nintendo Switch Pro Controller and Joy-Con Right Home LED).
+ *
+ * @param slot       Controller slot index in `[0, kMaxControllers - 1]`.
+ * @param brightness Normalized LED brightness intensity (`0..255`, where `0` = off and `255` = 100%).
+ */
+void posix_imgui_request_led_brightness(int slot, uint8_t brightness);
+
+/**
+ * @brief Enqueues an asynchronous RGB lightbar color update from the UI thread (Thread 1).
+ *
+ * Thread-safe and non-blocking. Forwarded to `d->report_parser.set_lightbar_color(d, r, g, b)`
+ * on the BTstack thread for supporting controllers (DualShock 4, DualSense, PS Move).
+ *
+ * @param slot Controller slot index in `[0, kMaxControllers - 1]`.
+ * @param r    Red channel intensity (`0..255`).
+ * @param g    Green channel intensity (`0..255`).
+ * @param b    Blue channel intensity (`0..255`).
+ */
+void posix_imgui_request_lightbar_color(int slot, uint8_t r, uint8_t g, uint8_t b);
+
+/**
+ * @brief Enables or disables virtual child devices (e.g., DualSense / DualShock 4 touchpad mouse).
+ *
+ * Thread-safe and non-blocking. Updates the atomic virtual-device flag and enqueues a
+ * `SetVirtualDevicesCmd` command on the BTstack thread that calls
+ * `uni_virtual_device_set_enabled(enabled)`. When disabled (`false`), any currently
+ * connected virtual child devices are immediately disconnected and removed from their slots.
+ *
+ * @param enabled True to allow virtual child devices; false (default) to disable and disconnect them.
+ */
+void posix_imgui_request_set_virtual_devices_enabled(bool enabled);
+
+/**
+ * @brief Returns whether virtual child devices are currently enabled (default: `false`).
+ *
+ * Thread-safe (reads an `std::atomic<bool>` with `std::memory_order_acquire`).
+ *
+ * @return True if virtual child devices are enabled; false otherwise.
+ */
+[[nodiscard]] bool posix_imgui_is_virtual_devices_enabled(void);
+
+/**
+ * @brief Updates the bitmask of physical Bluetooth input device categories (`PosixImguiDeviceTypeFlags`)
+ *        allowed to auto-connect.
+ *
+ * Thread-safe and non-blocking. Updates the atomic filter bitmask used by
+ * `on_device_discovered()` and `on_device_ready()`, and enqueues a
+ * `SetAllowedDeviceTypesCmd` command on the BTstack thread that immediately
+ * disconnects any currently connected physical devices belonging to a disabled category.
+ *
+ * @param allowed_types_mask Bitwise OR of `PosixImguiDeviceTypeFlags` (default: `POSIX_IMGUI_DEVICE_TYPE_DEFAULT`).
+ */
+void posix_imgui_request_set_allowed_device_types(uint32_t allowed_types_mask);
+
+/**
+ * @brief Returns the current bitmask of allowed physical input device categories.
+ *
+ * Thread-safe (reads an `std::atomic<uint32_t>` with `std::memory_order_acquire`).
+ *
+ * @return Bitwise OR of currently enabled `PosixImguiDeviceTypeFlags`.
+ */
+[[nodiscard]] uint32_t posix_imgui_get_allowed_device_types(void);
+
+/**
+ * @brief Enables or disables the Bluepad32 BLE configuration GATT service (`4627C4A4-AC00-...`).
+ *
+ * Thread-safe and non-blocking. Immediately updates the platform-cached enabled state and
+ * enqueues a `SetBleServiceEnabledCmd` command on the BTstack run-loop thread that calls
+ * `uni_bt_service_set_enabled(enabled)`.
+ *
+ * @param enabled True (default) to enable and advertise the BLE service; false to disable it.
+ */
+void posix_imgui_request_set_ble_service_enabled(bool enabled);
+
+/**
+ * @brief Alias for `posix_imgui_request_set_ble_service_enabled(enabled)`.
+ *
+ * @param enabled True to enable the BLE configuration service; false to disable it.
+ */
+void posix_imgui_set_ble_service_enabled(bool enabled);
+
+/**
+ * @brief Returns whether the Bluepad32 BLE configuration service is currently enabled (default: `true`).
+ *
+ * Thread-safe (reads an `std::atomic<bool>` with `std::memory_order_acquire`).
+ *
+ * @return True if the BLE configuration service is enabled; false otherwise.
+ */
+[[nodiscard]] bool posix_imgui_is_ble_service_enabled(void);
+
+/**
+ * @brief Alias for `posix_imgui_is_ble_service_enabled()`.
+ *
+ * @return True if the BLE configuration service is enabled; false otherwise.
+ */
+[[nodiscard]] bool posix_imgui_get_ble_service_enabled(void);
+
+/**
+ * @brief Sets the advertised device name for the Bluepad32 BLE configuration service.
+ *
+ * Thread-safe and non-blocking. Names longer than `UNI_BT_SERVICE_NAME_MAX_LEN` (29 UTF-8 bytes)
+ * are truncated. Passing `nullptr` or `""` resets the service name to `"Bluepad32"`.
+ * Updates the mutex-guarded platform state immediately and enqueues `SetBleServiceNameCmd`
+ * on the BTstack run-loop thread to invoke `uni_bt_service_set_name()`.
+ *
+ * @param name UTF-8 device name string (e.g., `"Bluepad32 rc car"`), or `nullptr`/`""` for default.
+ */
+void posix_imgui_request_set_ble_service_name(const char* name);
+
+/**
+ * @brief Alias for `posix_imgui_request_set_ble_service_name(name)`.
+ *
+ * @param name UTF-8 device name string, or `nullptr`/`""` to reset to `"Bluepad32"`.
+ */
+void posix_imgui_set_ble_service_name(const char* name);
+
+/**
+ * @brief Copies the current BLE configuration service name into `out_buf` (always NUL-terminated).
+ *
+ * Thread-safe. Safely no-ops if `out_buf == nullptr` or `out_len == 0`.
+ *
+ * @param[out] out_buf Destination character buffer.
+ * @param      out_len Size of `out_buf` in bytes (including NUL terminator).
+ */
+void posix_imgui_get_ble_service_name(char* out_buf, size_t out_len);
+
+/**
+ * @brief Returns a pointer to a thread-local copy of the NUL-terminated BLE configuration service name.
+ *
+ * Thread-safe. Copies `g_ble_service_name` under `g_ble_service_mutex` into a `thread_local`
+ * buffer so callers on any thread can safely read the returned C-string without data races.
+ *
+ * @return Non-null pointer to the configured BLE service name (default `"Bluepad32"`).
+ */
+[[nodiscard]] const char* posix_imgui_get_ble_service_name(void);
+
+/**
+ * @brief Sets or clears the session password for the Bluepad32 BLE configuration service (`AC0E`).
+ *
+ * Thread-safe and non-blocking. Passwords longer than `UNI_BT_SERVICE_PASSWORD_MAX_LEN` (31 UTF-8 bytes)
+ * are truncated. Passing `nullptr` or `""` clears the password and restores open access (`AC0E == 0`).
+ * Updates the mutex-guarded platform state immediately and enqueues `SetBleServicePasswordCmd`
+ * on the BTstack run-loop thread to invoke `uni_bt_service_set_password()`.
+ *
+ * @param password UTF-8 password string, or `nullptr`/`""` for open access.
+ */
+void posix_imgui_request_set_ble_service_password(const char* password);
+
+/**
+ * @brief Alias for `posix_imgui_request_set_ble_service_password(password)`.
+ *
+ * @param password UTF-8 password string, or `nullptr`/`""` for open access.
+ */
+void posix_imgui_set_ble_service_password(const char* password);
+
+/**
+ * @brief Copies the current BLE configuration service password into `out_buf` (always NUL-terminated).
+ *
+ * Thread-safe. Safely no-ops if `out_buf == nullptr` or `out_len == 0`. Writes `""` when no
+ * password is required (open access).
+ *
+ * @param[out] out_buf Destination character buffer.
+ * @param      out_len Size of `out_buf` in bytes (including NUL terminator).
+ */
+void posix_imgui_get_ble_service_password(char* out_buf, size_t out_len);
+
+/**
+ * @brief Returns a pointer to a thread-local copy of the NUL-terminated BLE configuration service password.
+ *
+ * Thread-safe. Copies `g_ble_service_password` under `g_ble_service_mutex` into a `thread_local`
+ * buffer so callers on any thread can safely read the returned C-string without data races.
+ *
+ * @return Non-null pointer to the configured BLE service password (`""` when open).
+ */
+[[nodiscard]] const char* posix_imgui_get_ble_service_password(void);
+
+/**
+ * @brief Requests a clean asynchronous shutdown of the BTstack run loop from any thread.
+ *
+ * Sets an atomic shutdown flag and enqueues a `ShutdownCmd` command on the BTstack thread
+ * that powers down HCI (`hci_power_control(HCI_POWER_OFF)`) or exits the run loop immediately
+ * if HCI is not active.
+ */
+void posix_imgui_request_shutdown(void);
+
+/**
+ * @brief Returns true if `posix_imgui_request_shutdown()` has been invoked.
+ *
+ * Thread-safe (reads an `std::atomic<bool>` with `std::memory_order_acquire`).
+ *
+ * @return True if shutdown has been requested; false otherwise.
+ */
+[[nodiscard]] bool posix_imgui_is_shutdown_requested(void);
+
+/**
+ * @brief Resets all internal slot tables, snapshots, and command queues for headless unit tests.
+ *
+ * Must only be called from `test_posix_imgui` between test cases when no concurrent
+ * BTstack worker thread is running.
+ */
+void posix_imgui_reset_for_test(void);
+
+/**
+ * @brief Synchronously drains queued `ControllerCommand` entries on the calling thread for tests.
+ */
+void posix_imgui_process_pending_commands(void);

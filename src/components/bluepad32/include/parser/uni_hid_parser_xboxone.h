@@ -10,6 +10,10 @@
 
 #include "parser/uni_hid_parser.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // For Xbox Wireless Controllers
 bool uni_hid_parser_xboxone_does_name_match(struct uni_hid_device_s* d, const char* name);
 void uni_hid_parser_xboxone_setup(struct uni_hid_device_s* d);
@@ -24,7 +28,11 @@ void uni_hid_parser_xboxone_play_dual_rumble(struct uni_hid_device_s* d,
                                              uint16_t duration_ms,
                                              uint8_t weak_magnitude,
                                              uint8_t strong_magnitude);
-void uni_hid_parser_xboxone_device_dump(struct uni_hid_device_s* d);
+/**
+ * @brief Formats the inferred Xbox Wireless Controller firmware/descriptor generation
+ *        (`"v3.1"`, `"v4.8"`, or `"v5.x"`) into `buf` (e.g., `"FW version v5.x"`).
+ */
+int uni_hid_parser_xboxone_device_extra_info(const struct uni_hid_device_s* d, char* buf, size_t len);
 
 /** BLE (Series / Xbox One w/ LE): periodic output write so the pad does not sleep the session (~1 min idle). */
 void uni_hid_parser_xboxone_ble_keepalive(struct uni_hid_device_s* d);
@@ -49,5 +57,9 @@ void xboxone_play_quad_rumble(struct uni_hid_device_s* d,
                               uint8_t trigger_right,
                               uint8_t weak_magnitude,
                               uint8_t strong_magnitude);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif  // UNI_HID_PARSER_XBOXONE_H

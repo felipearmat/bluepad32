@@ -6,36 +6,25 @@
 <img src="https://github.com/ricardoquesada/bluepad32/blob/develop/docs/images/bluepad32_logo_ok_280.png?raw=true" alt="drawing" width="216"/>
 </p>
 
-A Bluetooth controller "host" for the ESP32, ESP32-S3, ESP32-C3, ESP32-C6, ESP32-H2, Raspberry Pi Pico W, Pico 2 W, and
-Posix (Linux, macOS).
+Bluepad32 is a Bluetooth controller host for ESP32, ESP32-S3, ESP32-C3,
+ESP32-C5, ESP32-C6, ESP32-H2, Raspberry Pi Pico W, Pico 2 W, and POSIX (Linux,
+macOS).
 
-Add Bluetooth gamepad, mouse and keyboard support to your projects easily.
-
-In other words, it allows you to control a robot using a DualSense controller.
+Use Bluepad32 to add Bluetooth gamepad, mouse, and keyboard support to your
+projects. For example, you can control a robot with a DualSense controller.
 
 ## Where to start
 
-Choose your target platform:
+Select your target platform:
 
 | Platform                            | Start here                                                        | Further info              | Community projects                                                                                        |
 |-------------------------------------|-------------------------------------------------------------------|---------------------------|-----------------------------------------------------------------------------------------------------------|
 | Arduino IDE                         | [![Watch the video][youtube_image]](https://youtu.be/0jnY-XXiD8Q) | [Doc][plat_arduino]       | [Controller for Tello drone][tello]                                                                       |
 | Arduino using ESP-IDF toolchain     | [Template project][esp-idf-bluepad32-arduino]                     | [Doc][plat_arduino]       | [Lego Robot][esp32_example] ([video][esp32_video]), [gbaHD Shield][esp32_example2] (a GameBoy consolizer) |
-| Arduino + NINA coprocessor          | [Arduino Library][bp32-arduino]                                   | [Doc][plat_nina]          | [Philips CD-i meets Bluetooth][nina_example]                                                              |
-| CircuitPython + AirLift coprocessor | [CircuitPython Library][bp32-circuitpython]                       | [Doc][plat_airlift]       | [Quico console][airlift_example], Controlling 4 servos ([video][airlift_video])                           |
 | Pico W                              | [Pico W example][pico-w-example]                                  | [Doc][plat_picow_picosdk] | [Pico Switch][pico_switch], [PicoNtrol][pico_ntrol]                                                       |
 | ESP-IDF                             | [ESP32 example][esp32-example]                                    | [Doc][plat_esp32_espidf]  | [OGX-Wireless-Lite][ogx_wireless_lite]                                                                    |
-| Posix (Linux, macOS)                | [Posix example][posix-example]                                    | [Doc][plat_custom]        |                                                                                                           |
+| Posix (Linux, macOS)                | [Posix example][posix-example], [Posix ImGui][posix-imgui-example]| [Doc][plat_custom]        |                                                                                                           |
 | Unijoysticle                        | [Unijoysticle2][unijoysticle2]                                    | [Doc][plat_unijoysticle]  |                                                                                                           |
-| MightyMiggy                         | [Unijoysticle for Amiga][unijoysticle_sukko]                      | [Doc][plat_mightymiggy]   |                                                                                                           |
-
-[airlift_example]: https://gitlab.com/ricardoquesada/quico
-
-[airlift_video]: https://twitter.com/makermelissa/status/1482596378282913793
-
-[bp32-arduino]: https://github.com/ricardoquesada/bluepad32-arduino
-
-[bp32-circuitpython]: https://github.com/ricardoquesada/bluepad32-circuitpython
 
 [esp-idf-bluepad32-arduino]: https://github.com/ricardoquesada/esp-idf-arduino-bluepad32-template
 
@@ -45,25 +34,17 @@ Choose your target platform:
 
 [esp32_video]: https://www.instagram.com/p/Ca7T6twKZ0B/
 
-[nina_example]: https://eyskens.me/cd-i-meets-bluetooth/
-
 [ogx_wireless_lite]: https://github.com/wiredopposite/OGX-Wireless-Lite
 
 [pico_ntrol]: https://github.com/ShadeReogen/PicoNtrol
 
 [pico_switch]: https://github.com/juan518munoz/PicoSwitch-WirelessGamepadAdapter
 
-[plat_airlift]: https://bluepad32.readthedocs.io/en/latest/plat_airlift
-
 [plat_arduino]: https://bluepad32.readthedocs.io/en/latest/plat_arduino
 
 [plat_custom]: https://bluepad32.readthedocs.io/en/latest/adding_new_platform
 
 [plat_esp32_espidf]: https://bluepad32.readthedocs.io/en/latest/plat_esp32
-
-[plat_mightymiggy]: https://bluepad32.readthedocs.io/en/latest/plat_mightymiggy
-
-[plat_nina]: https://bluepad32.readthedocs.io/en/latest/plat_nina
 
 [plat_unijoysticle]: https://bluepad32.readthedocs.io/en/latest/plat_unijoysticle
 
@@ -73,21 +54,18 @@ Choose your target platform:
 
 [unijoysticle2]: https://retro.moe/unijoysticle2/
 
-[unijoysticle_sukko]: https://gitlab.com/SukkoPera/unijoysticle2
-
 [youtube_image]: https://lh3.googleusercontent.com/pw/AJFCJaXiDBy3NcQBBB-WFFVCsvYBs8szExsYQVwG5qqBTtKofjzZtJv_6GSL7_LfYRiypF1K0jjjgziXJuxAhoEawvzV84hlbmVTrGeXQYpVnpILZwWkbFi-ccX4lEzEbYXX-UbsEzpHLhO8qGVuwxOl7I_h1Q=-no?authuser=0
 
 ## Features
 
-* Supports most, if not all, modern Bluetooth gamepads, mice and keyboards (see below)
-* Supports ESP32 and Pico W families
-* Supported APIs: ESP-IDF, Pico-SDK, Arduino and CircuitPython
-* Fast (very low latency)
-* Small footprint
-* Uses only one core (CPU0). The remaining one is free to use.
-* C11 based
-* Open Source (see below)
-* Easy to integrate into 3rd party projects
+* Supports modern Bluetooth gamepads, mice, and keyboards
+* Supports ESP32 and Pico W microcontroller families
+* Supports ESP-IDF, Pico SDK, and Arduino APIs
+* Delivers low latency and a small memory footprint
+* Runs on a single core (`CPU0`) and leaves the second core free
+* Uses standard C11
+* Provides an open-source license
+* Integrates into third-party projects
 
 ## Supported controllers
 
@@ -97,25 +75,26 @@ Choose your target platform:
 * Sony DualShock 4 (PS4)
 * Sony DualShock 3 (PS3)
 * Nintendo Switch Pro controller
-* Nintendo Switch JoyCon
+* Nintendo Switch Joy-Con
 * Nintendo Wii U controller
-* Nintendo Wii Remote + accessories
-* Xbox Wireless controller (models 1708, 1914, adaptive)
+* Nintendo Wii Remote and accessories
+* Xbox Wireless controller (models 1708, 1914, Adaptive)
 * Android controllers
 * Steam controller
 * Stadia controller
-* PC/Window controller
+* PC and Windows controllers
 * 8BitDo controllers
 * Atari joystick
 * iCade
-* Mouse
+* Mice
 * Keyboards
-* And more
 
-NOTE: Original **ESP32**, **Pico W** and **Pico 2 W** support all listed controllers. **ESP32-S3**, **ESP32-C3**,
-**ESP32-C6** and **ESP32-H2** only support a subset.
+NOTE: The original **ESP32**, **Pico W**, and **Pico 2 W** support all listed
+controllers. **ESP32-S3**, **ESP32-C3**, **ESP32-C5**, **ESP32-C6**, and
+**ESP32-H2** support only a subset of controllers.
 
-See: [Supported gamepads][gamepads], [supported mice][mice] and [supported keyboards][keyboards]
+See [Supported gamepads][gamepads], [supported mice][mice], and
+[supported keyboards][keyboards].
 
 [gamepads]: https://bluepad32.readthedocs.io/en/latest/supported_gamepads/
 
@@ -125,19 +104,21 @@ See: [Supported gamepads][gamepads], [supported mice][mice] and [supported keybo
 
 ## Pre-compiled binaries
 
-Download pre-compiled binaries for Unijoysticle, Nina, AirLift, MightyMiggy:
+Download pre-compiled binaries for Unijoysticle from the releases page:
 
 * https://github.com/ricardoquesada/bluepad32/releases
 
-## Creating your project
+## Create your project
 
-See the examples folder which includes examples for:
+The `examples` folder includes sample projects for these platforms:
 
-* [Bluepad32 for ESP32][esp32-example] (ESP32, ESP32-S3, ESP32-C3, ESP32-C6 and ESP32-H2)
+* [Bluepad32 for ESP32][esp32-example] (ESP32, ESP32-S3, ESP32-C3, ESP32-C5,
+    ESP32-C6, and ESP32-H2)
 * [Bluepad32 for Pico W][pico-w-example] (Pico W and Pico 2 W)
 * [Bluepad32 for Posix (Linux, macOS)][posix-example]
+* [Bluepad32 Posix ImGui Diagnostic Suite][posix-imgui-example]
 
-Arduino examples are in:
+Find the Arduino examples at these links:
 
 * [Bluepad32 for Arduino IDE][arduino-ide-example]
 * [Bluepad32 for Arduino + ESP-IDF][arduino-esp-idf-example]
@@ -147,6 +128,7 @@ Arduino examples are in:
 [pico-w-example]: examples/pico_w/
 
 [posix-example]: examples/posix
+[posix-imgui-example]: examples/posix_imgui
 
 [arduino-ide-example]: https://www.youtube.com/watch?v=0jnY-XXiD8Q
 
@@ -155,6 +137,7 @@ Arduino examples are in:
 ## Support
 
 * [Documentation][docs] [![Documentation Status](https://readthedocs.org/projects/bluepad32/badge/?version=latest)](https://bluepad32.readthedocs.io/?badge=latest)
+    * [Linux / macOS (POSIX)](docs/plat_posix.md)
 * [Discord][discord] [![discord](https://img.shields.io/discord/775177861665521725.svg)](https://discord.gg/r5aMn6Cw5q)
 
 [docs]: https://bluepad32.readthedocs.io/
@@ -163,17 +146,19 @@ Arduino examples are in:
 
 ## License
 
-Bluepad32 is open source, [licensed under Apache 2][apache2].
+Bluepad32 is open-source software under the [Apache 2.0 License][apache2].
 
-However, Bluepad32 depends on the great [BTstack library][btstack-github]. Which is free to use for
-open source projects. But commercial for closed-source projects.
+Bluepad32 depends on the [BTstack library][btstack-github]. BTstack is free for
+open-source projects, but requires a commercial license for closed-source
+projects.
 
-If you are developing a commercial product for:
+If you develop a commercial product, follow these licensing rules:
 
-- ESP32: [You should contact BTstack people][btstack-homepage].
-- Pico W: [You are already covered by Raspberry Pi License][rpi-btstack-license].
+- ESP32: [Contact BlueKitchen][btstack-homepage] for a commercial license.
+- Pico W: The [Raspberry Pi License][rpi-btstack-license] covers commercial
+    use.
 
-Notice: I’m not affiliated with BTstack people. They are super friendly and willing to help.
+Note: Bluepad32 has no affiliation with BlueKitchen.
 
 [btstack-github]: https://github.com/bluekitchen/btstack
 

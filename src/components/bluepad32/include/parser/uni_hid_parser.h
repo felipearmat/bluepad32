@@ -5,7 +5,12 @@
 #ifndef UNI_HID_PARSER_H
 #define UNI_HID_PARSER_H
 
+#include <stddef.h>
 #include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // Forward declarations
 struct uni_hid_device_s;
@@ -23,6 +28,11 @@ struct hid_globals_s {
 typedef struct hid_globals_s hid_globals_t;
 
 typedef void (*report_setup_fn_t)(struct uni_hid_device_s* d);
+// Optional teardown hook invoked by uni_hid_device_delete() and uni_hid_device_setup()
+// BEFORE uni_hid_device_init() zeroes the device struct with memset. Parsers that embed
+// intrusive btstack_timer_source_t nodes inside parser_data[] (such as Switch setup_timer)
+// must implement this callback to remove their timers from BTstack's run loop first.
+typedef void (*report_deinit_fn_t)(struct uni_hid_device_s* d);
 typedef void (*report_init_report_fn_t)(struct uni_hid_device_s* d);
 typedef void (*report_parse_usage_fn_t)(struct uni_hid_device_s* d,
                                         const hid_globals_t* globals,
@@ -36,7 +46,25 @@ typedef void (*report_parse_input_report_fn_t)(struct uni_hid_device_s* d, const
 typedef void (*report_parse_feature_report_fn_t)(struct uni_hid_device_s* d,
                                                  const uint8_t* report,
                                                  uint16_t report_len);
+// Sets the controller's player indicator LEDs.
+// `leds` is a 4-bit bitmask (`BIT(0)..BIT(3)`, `0x00..0x0f`), corresponding to `uni_gamepad_seat_t`
+// (`GAMEPAD_SEAT_NONE = 0x00`, `GAMEPAD_SEAT_A = BIT(0)`, `GAMEPAD_SEAT_B = BIT(1)`,
+// `GAMEPAD_SEAT_C = BIT(2)`, `GAMEPAD_SEAT_D = BIT(3)`) or multi-bit combinations
+// (e.g. `GAMEPAD_SEAT_AB_MASK = 0x03`), NOT a sequential player index `0..4`.
 typedef void (*report_set_player_leds_fn_t)(struct uni_hid_device_s* d, uint8_t leds);
+/**
+ * @brief Sets the controller's single-channel LED brightness (e.g., Nintendo Switch Pro Controller
+ *        and Joy-Con Right Home Button Ring LED).
+ *
+ * Uses the normalized 8-bit `0..255` scale to match `report_set_lightbar_color_fn_t` and
+ * `report_play_dual_rumble_fn_t`, allowing parsers to map intensity to hardware registers
+ * via a single bit-shift (e.g., `brightness >> 4` for the 4-bit Switch Home LED).
+ *
+ * @param d          Pointer to the target HID device.
+ * @param brightness Normalized 8-bit LED brightness intensity (`0..255`, where `0x00` turns the LED
+ *                   off and `0xff` sets 100% maximum intensity).
+ */
+typedef void (*report_set_led_brightness_fn_t)(struct uni_hid_device_s* d, uint8_t brightness);
 typedef void (*report_set_lightbar_color_fn_t)(struct uni_hid_device_s* d, uint8_t r, uint8_t g, uint8_t b);
 // start_delay_ms: a delayed start measured in milliseconds. Use 0 to start rumble immediately.
 // duration_ms: duration of rumble in milliseconds. The controller might limit the max duration. 0 means stop rumble.
@@ -48,12 +76,43 @@ typedef void (*report_play_dual_rumble_fn_t)(struct uni_hid_device_s* d,
                                              uint16_t duration_ms,
                                              uint8_t weak_magnitude,
                                              uint8_t strong_magnitude);
-typedef void (*report_device_dump_t)(struct uni_hid_device_s* d);
+/**
+ * @brief Formats parser-specific hardware/firmware diagnostic info into a caller-provided buffer.
+ *
+ * Why a caller-owned `(buf, len)` buffer (`snprintf` idiom):
+ *   Decouples diagnostic string formatting from console `stdout` (`logi`) side effects with
+ *   zero heap allocations, zero idle `.bss` SRAM overhead on embedded targets (ESP32/RP2040),
+ *   and 100% reentrancy across multiple connected controllers and threads. Both console dumps
+ *   (`uni_hid_device_dump_device()`) and GUI consumers (`posix_imgui` Info tab) share this
+ *   single formatter.
+ *
+ * Formatting contract:
+ *   Implementations must write a NUL-terminated single-line string into `buf` (up to `len`
+ *   bytes) WITHOUT a controller model prefix, leading tabs (`\t`), or trailing newlines (`\n`).
+ *   Examples:
+ *     - DualShock 4: `"FW version 0x412, HW version 0x100"`
+ *     - DualSense:   `"FW version: 0x1020304, HW version: 0x10002, update version: 0x221, use vibration2: 1"`
+ *     - Switch:      `"FW version 4.33"`
+ *     - Wii:         `"device 'Wii Mote Motion Plus (2nd gen)', extension 'Nunchuk'"`
+ *     - Xbox:        `"FW version v5.x"`
+ *     - SInput:      `"protocol=1, caps0=0x0f, caps1=0x01, poll=1000us, accel=+/-8g, gyro=+/-2000dps"`
+ *     - Mouse:       `"scale=0.200000"`
+ *
+ * @param d   Pointer to the HID device to inspect.
+ * @param buf Destination character buffer.
+ * @param len Capacity of `buf` in bytes (including space for the NUL terminator).
+ * @return `> 0`: Number of characters that would have been written (excluding NUL), per `snprintf`;
+ *         `0`:   No extra info available (writes `buf[0] = '\0'`);
+ *         `-1`:  Invalid arguments (`d == NULL`, `buf == NULL`, or `len == 0`).
+ */
+typedef int (*report_device_extra_info_fn_t)(const struct uni_hid_device_s* d, char* buf, size_t len);
 
 // Parsers should implement these optional functions:
 typedef struct {
     // Called only once when the type of gamepad is known.
     report_setup_fn_t setup;
+    // Called before a device slot is zeroed/deleted to clean up parser-owned timers/resources.
+    report_deinit_fn_t deinit;
     // Called before starting a new report
     report_init_report_fn_t init_report;
     // Called for each usage in the report: usage page + usage + value
@@ -62,14 +121,18 @@ typedef struct {
     report_parse_input_report_fn_t parse_input_report;
     // Called with the feature report
     report_parse_feature_report_fn_t parse_feature_report;
-    // If implemented, turns on/off the different gamepad LEDs
+    // If implemented, turns on/off the gamepad player LEDs using a 4-bit bitmask (`BIT(0)..BIT(3)` /
+    // `uni_gamepad_seat_t`).
     report_set_player_leds_fn_t set_player_leds;
     // If implemented, changes the lightbar color (e.g.: in DS4 and DualSense)
     report_set_lightbar_color_fn_t set_lightbar_color;
+    // If implemented, sets single-channel LED brightness (`0..255`, e.g., Switch Pro / Joy-Con Right Home LED)
+    report_set_led_brightness_fn_t set_led_brightness;
     // If implemented, activates rumble in the gamepad
     report_play_dual_rumble_fn_t play_dual_rumble;
-    // If implemented, it dumps device info
-    report_device_dump_t device_dump;
+    // If implemented, formats parser-specific hardware/firmware diagnostic info into a caller-owned buffer
+    // (used by both `uni_hid_device_dump_device()` console dumps and GUI telemetry snapshots).
+    report_device_extra_info_fn_t device_extra_info;
 } uni_report_parser_t;
 
 void uni_hid_parse_input_report(struct uni_hid_device_s* d, const uint8_t* report, uint16_t report_len);
@@ -78,5 +141,9 @@ int32_t uni_hid_parser_process_pedal(const hid_globals_t* globals, uint32_t valu
 uint8_t uni_hid_parser_process_hat(const hid_globals_t* globals, uint32_t value);
 void uni_hid_parser_process_dpad(uint16_t usage, uint32_t value, uint8_t* dpad);
 uint8_t uni_hid_parser_hat_to_dpad(uint8_t hat);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif  // UNI_HID_PARSER_H

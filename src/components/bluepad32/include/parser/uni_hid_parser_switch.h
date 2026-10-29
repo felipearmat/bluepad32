@@ -10,18 +10,62 @@
 
 #include "parser/uni_hid_parser.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Nintendo Switch devices
+
+/** @brief Initialize the Nintendo Switch parser state machine, calibration defaults, and rumble callbacks. */
 void uni_hid_parser_switch_setup(struct uni_hid_device_s* d);
+
+/**
+ * @brief Disarm the Switch `setup_timer` before the device struct is zeroed or deleted.
+ *
+ * Prevents BTstack's intrusive run-loop timer list from retaining a dangling pointer into
+ * `d->parser_data` when a Switch controller disconnects mid-setup.
+ */
+void uni_hid_parser_switch_deinit(struct uni_hid_device_s* d);
+
 void uni_hid_parser_switch_init_report(struct uni_hid_device_s* d);
 void uni_hid_parser_switch_parse_input_report(struct uni_hid_device_s* d, const uint8_t* report, uint16_t len);
 void uni_hid_parser_switch_set_player_leds(struct uni_hid_device_s* d, uint8_t leds);
+/**
+ * @brief Sets the Nintendo Switch Home button LED ring brightness (`SUBCMD_SET_HOME_LIGHT = 0x38`).
+ *
+ * Supports the Nintendo Switch Pro Controller (`057e:2009`) and Joy-Con Right (`057e:2007`).
+ * Ignores the request when `d == NULL`, when the setup FSM has not yet reached `STATE_READY`,
+ * or when `SUBCMD_REQ_DEV_INFO` reports a controller subtype without a physical Home LED
+ * (`JCL`, `NES_L`, `NES_R`, or `SNES`).
+ *
+ * @param d          Pointer to the target HID device.
+ * @param brightness Normalized 8-bit LED brightness intensity (`0..255`), which the parser scales
+ *                   to the 4-bit hardware range (`0x0..0xF`).
+ */
+void uni_hid_parser_switch_set_led_brightness(struct uni_hid_device_s* d, uint8_t brightness);
 void uni_hid_parser_switch_play_dual_rumble(struct uni_hid_device_s* d,
                                             uint16_t start_delay_ms,
                                             uint16_t duration_ms,
                                             uint8_t weak_magnitude,
                                             uint8_t strong_magnitude);
 bool uni_hid_parser_switch_does_name_match(struct uni_hid_device_s* d, const char* name);
-void uni_hid_parser_switch_device_dump(struct uni_hid_device_s* d);
+/**
+ * @brief Formats the Nintendo Switch controller firmware version (`major.minor` from
+ *        `SUBCMD_REQ_DEV_INFO`) into `buf` (e.g., `"FW version 4.33"`).
+ */
+int uni_hid_parser_switch_device_extra_info(const struct uni_hid_device_s* d, char* buf, size_t len);
+
+/**
+ * @brief Ask the pad to disconnect itself and go to sleep (subcommand 0x06, argument 0x00).
+ *
+ * Same as the console does when it turns the controllers off: the pad drops the link and powers
+ * down, and reconnects on its next button press. No-op for non-Switch devices.
+ */
+void uni_hid_parser_switch_request_sleep(struct uni_hid_device_s* d);
+
+#ifdef __cplusplus
+}
+#endif
 
 void uni_hid_parser_switch_teardown(struct uni_hid_device_s* d);
 bool uni_hid_parser_switch_input_processed_in_parser(const struct uni_hid_device_s* d);

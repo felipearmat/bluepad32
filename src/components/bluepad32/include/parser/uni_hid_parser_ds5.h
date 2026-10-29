@@ -11,6 +11,10 @@
 
 #include "parser/uni_hid_parser.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct __attribute((packed)) {
     uint8_t effect;
     uint8_t data[10];
@@ -26,14 +30,23 @@ void uni_hid_parser_ds5_setup(struct uni_hid_device_s* d);
 void uni_hid_parser_ds5_init_report(struct uni_hid_device_s* d);
 void uni_hid_parser_ds5_parse_input_report(struct uni_hid_device_s* d, const uint8_t* report, uint16_t len);
 void uni_hid_parser_ds5_parse_feature_report(struct uni_hid_device_s* d, const uint8_t* report, uint16_t len);
-void uni_hid_parser_ds5_set_player_leds(struct uni_hid_device_s* d, uint8_t value);
+// Sets the DualSense 5-LED player indicator bar.
+// - If BIT(7) is clear (`(leds & BIT(7)) == 0`), `leds & 0x0f` is treated as a 4-bit
+//   `uni_gamepad_seat_t` bitmask and mapped to Sony's symmetric 5-LED patterns.
+// - If BIT(7) is set (`(leds & BIT(7)) != 0`), bits 0..4 (`leds & 0x1f`) directly
+//   represent each of the 5 physical DualSense player LEDs.
+void uni_hid_parser_ds5_set_player_leds(struct uni_hid_device_s* d, uint8_t leds);
 void uni_hid_parser_ds5_set_lightbar_color(struct uni_hid_device_s* d, uint8_t r, uint8_t g, uint8_t b);
 void uni_hid_parser_ds5_play_dual_rumble(struct uni_hid_device_s* d,
                                          uint16_t start_delay_ms,
                                          uint16_t duration_ms,
                                          uint8_t weak_magnitude,
                                          uint8_t strong_magnitude);
-void uni_hid_parser_ds5_device_dump(struct uni_hid_device_s* d);
+/**
+ * @brief Formats DualSense firmware, hardware, update version, and vibration2 capability into `buf`
+ *        (e.g., `"FW version: 0x1020304, HW version: 0x10002, update version: 0x221, use vibration2: 1"`).
+ */
+int uni_hid_parser_ds5_device_extra_info(const struct uni_hid_device_s* d, char* buf, size_t len);
 
 // Unique to DualSense. Not part of the "hid_parser" interface
 // Warning: Adaptive trigger API is experimental. It might change in the future without further notice.
@@ -71,5 +84,9 @@ void uni_hid_parser_ds5_get_touchpad(struct uni_hid_device_s* d, uint8_t touch_p
 
 /** Copy the last raw 0x31 input report (up to 78 bytes). */
 bool uni_hid_parser_ds5_get_last_input_report(struct uni_hid_device_s* d, uint8_t* report, uint16_t* len);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif  // UNI_HID_PARSER_DS5_H

@@ -9,6 +9,10 @@
 
 #include "parser/uni_hid_parser.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // For DUALSHOCK 4 gamepads
 void uni_hid_parser_ds4_setup(struct uni_hid_device_s* d);
 void uni_hid_parser_ds4_init_report(struct uni_hid_device_s* d);
@@ -20,6 +24,17 @@ void uni_hid_parser_ds4_play_dual_rumble(struct uni_hid_device_s* d,
                                          uint16_t duration_ms,
                                          uint8_t weak_magnitude,
                                          uint8_t strong_magnitude);
-void uni_hid_parser_ds4_device_dump(struct uni_hid_device_s* d);
+/**
+ * @brief Formats DualShock 4 firmware and hardware versions into `buf`
+ *        (e.g., `"FW version 0x412, HW version 0x100"`).
+ *
+ * Note: `fw_version` and `hw_version` are initially `0` when `setup()` completes and are
+ * populated asynchronously when feature report `0xa3` (`DS4_FEATURE_REPORT_FIRMWARE_VERSION`) arrives.
+ */
+int uni_hid_parser_ds4_device_extra_info(const struct uni_hid_device_s* d, char* buf, size_t len);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif  // UNI_HID_PARSER_DS4_H
