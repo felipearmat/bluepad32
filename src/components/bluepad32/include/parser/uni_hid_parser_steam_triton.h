@@ -13,6 +13,13 @@ extern "C" {
 
 struct uni_hid_device_s;
 
+// IDs also used by the BLE advertisement parsing (uni_bt_le.c).
+#define UNI_TRITON_VALVE_VID 0x28de   // Valve Corporation
+#define UNI_TRITON_PID_USB 0x1302     // Steam Controller 2026 ("Triton") over USB
+#define UNI_TRITON_PID_BLE 0x1303     // Steam Controller 2026 ("Triton") over BLE
+#define UNI_TRITON_PID_PUCK 0x1304    // Steam Controller 2026 ("Triton") Wireless Puck
+#define UNI_TRITON_PID_NEREID 0x1305  // Steam Controller 2026 ("Triton") Nereid
+
 void uni_hid_parser_steam_triton_setup(struct uni_hid_device_s* d);
 void uni_hid_parser_steam_triton_teardown(struct uni_hid_device_s* d);
 void uni_hid_parser_steam_triton_init_report(struct uni_hid_device_s* d);
