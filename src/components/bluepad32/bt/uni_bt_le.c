@@ -878,7 +878,7 @@ void uni_bt_le_on_hci_event_gattservice_meta(const uint8_t* packet, uint16_t siz
         case GATTSERVICE_SUBEVENT_HID_INFORMATION:
         case GATTSERVICE_SUBEVENT_HID_PROTOCOL_MODE:
         case GATTSERVICE_SUBEVENT_HID_SERVICE_REPORTS_NOTIFICATION:
-            uni_hids_client_packet_handler(HCI_EVENT_PACKET, 0, (uint8_t*)packet, size);
+            uni_hids_host_packet_handler(HCI_EVENT_PACKET, 0, (uint8_t*)packet, size);
             break;
 
         default:
@@ -1292,11 +1292,6 @@ void uni_bt_le_on_gap_event_advertising_report(const uint8_t* packet, uint16_t s
     name[0] = 0;
 
     if (size < 12) {
-        return;
-    }
-
-    if (uni_hid_parser_switch2_does_packet_match(packet, size)) {
-        (void)uni_bt_le_switch2_handle_advertisement(packet, size);
         return;
     }
 
